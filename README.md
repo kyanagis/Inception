@@ -1,135 +1,119 @@
-# Inception VirtualBoxイメージ
+# Inception VirtualBox Appliance
 
-42のInception課題用に、個人的なデスクトップ環境を再構築し、
-Inception向けに簡略化したNixOS VirtualBoxアプライアンスです。
+[日本語](README.ja.md)
 
-## OVAを入手する
+A NixOS-based VirtualBox appliance for working on the 42 Inception project.
+It recreates a personal desktop environment in a simplified form focused on
+Inception.
 
-GitHub Releaseから次のファイルをダウンロードしてください。
+## Getting the OVA
+
+Download the following files from the GitHub Release:
 
 - `inception.ova.part-aa`
 - `inception.ova.part-ab`
 - `inception.ova.sha256`
 
-GitHub Release：
+[Inception VirtualBox OVA Release](https://github.com/kyanagis/Inception/releases/tag/ova-latest)
 
-https://github.com/kyanagis/Inception/releases/tag/ova-latest
-
-3つのファイルを同じディレクトリへ置き、OVAを結合します。
+Place all three files in the same directory and assemble the OVA:
 
 ```sh
 cat inception.ova.part-* > inception.ova
 ```
 
-結合後、SHA-256を確認します。
+Verify the assembled file:
 
 ```sh
 sha256sum -c inception.ova.sha256
 ```
 
-次のように表示されれば正常です。
+The result should be:
 
 ```text
 inception.ova: OK
 ```
 
-## VirtualBoxへインポートする
+## Importing into VirtualBox
 
-1. VirtualBoxを起動します。
-2. 「ファイル」→「仮想アプライアンスのインポート」を選択します。
-3. 結合した`inception.ova`を選択します。
-4. VM名、メモリ、CPU、保存先を確認します。
-5. 「インポート」を押します。
-6. インポート完了後、`Inception` VMを起動します。
+1. Open VirtualBox.
+2. Select **File → Import Appliance**.
+3. Select the assembled `inception.ova`.
+4. Review the VM name, memory, CPU, and storage location.
+5. Click **Import**.
+6. Start the `Inception` VM after the import completes.
 
-初期構成：
+The default configuration is:
 
-- CPU：4
-- メモリ：4 GiB
-- ネットワーク：NAT
-- 仮想ディスク：30 GiB、可変サイズ
+- 4 CPUs
+- 4 GiB of memory
+- NAT networking
+- A 30 GiB dynamically allocated virtual disk
 
-## 既存のInception VMがある場合
+### If an Inception VM already exists
 
-同じ名前や仮想ディスクが残っていると、次のエラーになることがあります。
+An existing VM or virtual disk can cause a `VERR_ALREADY_EXISTS` error during
+import. In that case, use a different VM name such as `Inception-clean`, choose
+a different VirtualBox storage directory, or inspect the directory left by the
+failed import.
 
-```text
-VERR_ALREADY_EXISTS
-Could not create the imported medium
-```
+If the existing VM contains data you need, do not delete it. Import the new VM
+with a different name or storage location.
 
-その場合は、次のいずれかを行ってください。
+## First boot setup
 
-- インポート時のVM名を`Inception-clean`など別名にする
-- VirtualBoxの保存先を別のディレクトリにする
-- 以前のインポートに失敗して残ったVMフォルダを確認する
+The VM automatically logs into the `inception` Plasma user.
 
-既存VMに必要なデータがある場合は削除せず、別名・別保存先でインポートしてください。
-
-## 初回起動後の設定
-
-VMを起動すると、Plasmaへ`inception`ユーザーで自動ログインします。
-
-初期パスワード：
+Initial password:
 
 ```text
 inception
 ```
 
-初回ログイン時に、42のログイン名を入力する設定画面が表示されます。
-
-設定画面を閉じた場合は、ターミナルで次を実行してください。
+On first login, enter your 42 login in the setup dialog. If you close the
+dialog, run the following command in a terminal:
 
 ```sh
 inception-setup YOUR_42_LOGIN
 ```
 
-例えば、42ログインが`kyanagis`の場合：
+For example:
 
 ```sh
 inception-setup kyanagis
 ```
 
-設定後は、新しいターミナルを開いてください。
-
-設定される値：
-
-```text
-データ保存先:
-/home/YOUR_42_LOGIN/data
-
-ドメイン:
-YOUR_42_LOGIN.42.fr
-```
-
-## Inception課題で使用する値
-
-各利用者は、自分のInceptionリポジトリをVM内へcloneして作業してください。
-
-Docker named volumeの保存先：
+Open a new terminal after changing the login. The setup creates the following:
 
 ```text
 /home/YOUR_42_LOGIN/data
-```
-
-WordPressのドメイン：
-
-```text
 YOUR_42_LOGIN.42.fr
 ```
 
-## OVAの構成
+## Values used for the Inception project
 
-- NixOSとKDE Plasmaデスクトップ
-- Docker EngineとDocker Compose
-- Git、GNU Make、OpenSSL、curl、Vim、Kitty
-- 個人的なデスクトップ環境を再構築し、Inception向けに簡略化したテーマ、壁紙、操作設定
-- 42ログインを登録する初回設定ツール
+Clone each user's Inception repository inside the VM and use the configured
+login in the following locations:
 
-Microsoft Visual Studio CodeとGoogle Chromeは、ライセンスの都合により公開OVAで
-再配布できないため、同梱していません。
+```text
+Docker named volume data:
+/home/YOUR_42_LOGIN/data
 
-必要な場合は、各自のライセンス確認後にインストールしてください。
+WordPress domain:
+YOUR_42_LOGIN.42.fr
+```
+
+## Included environment
+
+- NixOS and KDE Plasma
+- Docker Engine and Docker Compose
+- Git, GNU Make, OpenSSL, curl, Vim, and Kitty
+- A simplified personal desktop environment focused on Inception
+- A first-login 42 login setup tool
+
+Microsoft Visual Studio Code and Google Chrome are not included because their
+licenses do not allow redistribution in a public OVA. If needed, install them
+yourself after reviewing their licenses:
 
 ```sh
 NIXPKGS_ALLOW_UNFREE=1 nix profile install --impure nixpkgs#vscode
