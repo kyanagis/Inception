@@ -1,0 +1,82 @@
+name: Build Inception OVA
+
+on:
+  workflow_dispatch:
+  push:
+    tags:
+      - "v*"
+
+permissions:
+  contents: write
+
+jobs:
+  ova:
+    runs-on: ubuntu-24.04
+
+    steps:
+      - name: Checkout Inception
+        uses: actions/checkout@v4
+
+      # nixos-config is private, so its deploy key must be added as the
+      # NIXOS_CONFIG_DEPLOY_KEY repository secret.
+      - name: Load nixos-config deploy key
+        uses: webfactory/ssh-agent@v0.9.1
+        with:
+          ssh-private-key: ${{ secrets.NIXOS_CONFIG_DEPLOY_KEY }}
+
+      - name: Trust GitHub SSH host key
+        run: ssh-keyscan github.com >> "$HOME/.ssh/known_hosts"
+
+      - name: Install Nix
+        uses: cachix/install-nix-action@v31
+        with:
+          extra_nix_config: |
+            max-jobs = auto
+            cores = 2
+
+      - name: Cache Nix store
+        uses: actions/cache@v4
+        with:
+          path: |
+            /nix/store
+            /nix/var/nix/db
+          key: nix-store-${{ runner.os }}-${{ hashFiles('flake.lock', 'flake.nix', 'nix/**/*.nix') }}
+          restore-keys: |
+            nix-store-${{ runner.os }}-
+
+      - name: Build OVA
+        run: nix build path:.#packages.x86_64-linux.vbox -o result-vbox --print-build-logs
+
+      - name: Find OVA
+        id: ova
+        run: |
+          ova="$(find -L result-vbox -type f -name '*.ova' -print -quit)"
+          test -n "$ova"
+          echo "path=$ova" >> "$GITHUB_OUTPUT"
+
+      - name: Split and verify OVA
+        run: |
+          split -b 1900M "${{ steps.ova.outputs.path }}" inception.ova.part-
+          sha256sum "${{ steps.ova.outputs.path }}" | sed 's#^.*/##' > inception.ova.sha256
+          expected="$(awk '{print $1}' inception.ova.sha256)"
+          actual="$(cat inception.ova.part-* | sha256sum | awk '{print $1}')"
+          test "$actual" = "$expected"
+
+      - name: Upload OVA artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: inception-ova
+          path: |
+            inception.ova.part-*
+            inception.ova.sha256
+          if-no-files-found: error
+          retention-days: 14
+
+      - name: Publish GitHub Release
+        if: startsWith(github.ref, 'refs/tags/v')
+        uses: softprops/action-gh-release@v2
+        with:
+          files: |
+            inception.ova.part-*
+            inception.ova.sha256
+          generate_release_notes: true

@@ -1,0 +1,11 @@
+.direnv/
+.DS_Store
+result
+result-*
+*.qcow2
+
+srcs/.env
+secrets/
+*.key
+*.crt
+*.pem
