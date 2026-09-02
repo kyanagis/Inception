@@ -1,0 +1,4 @@
+**
+!Dockerfile
+!conf/server.cnf
+!tools/entrypoint.sh

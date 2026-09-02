@@ -1,0 +1,31 @@
+# Portable subset of the ThinkPad zsh configuration.
+# Do not reference a host-specific /nix/store path from the appliance.
+bindkey -e
+bindkey '^I' expand-or-complete
+setopt COMPLETE_IN_WORD AUTO_CD AUTO_PUSHD PUSHD_IGNORE_DUPS
+setopt APPEND_HISTORY EXTENDED_HISTORY HIST_EXPIRE_DUPS_FIRST
+setopt HIST_FIND_NO_DUPS HIST_IGNORE_ALL_DUPS HIST_IGNORE_SPACE
+setopt HIST_SAVE_NO_DUPS SHARE_HISTORY INTERACTIVE_COMMENTS NO_BEEP
+HISTSIZE=100000
+SAVEHIST=100000
+HISTFILE="$HOME/.zsh_history"
+
+zstyle ':completion:*' menu select
+zstyle ':completion:*' group-name ''
+zstyle ':completion:*' squeeze-slashes true
+zstyle ':completion:*' special-dirs true
+zstyle ':completion:*' completer _complete _match _approximate
+zstyle ':completion:*' matcher-list 'm:{a-zA-Z}={A-Za-z}' 'r:|[._-]=* r:|=*'
+autoload -Uz compinit
+compinit
+
+alias ..='cd ..'
+alias ...='cd ../..'
+alias c=clear
+alias ll='ls -lah'
+alias la='ls -A'
+alias l='ls -lAh'
+alias ports='ss -tulpn'
+alias vimdiff='vim -d'
+
+PROMPT='%n@%m:%~ %# '

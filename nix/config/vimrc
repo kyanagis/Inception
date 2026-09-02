@@ -1,0 +1,64 @@
+set nocompatible
+set encoding=utf-8
+set background=dark
+set number
+set relativenumber
+set cursorline
+set scrolloff=5
+set sidescrolloff=5
+set nowrap
+set hidden
+set autoread
+set splitright
+set splitbelow
+set wildmenu
+set showcmd
+set ruler
+set laststatus=2
+set backspace=indent,eol,start
+set ignorecase
+set smartcase
+set incsearch
+set hlsearch
+set mouse=a
+set tabstop=4
+set shiftwidth=4
+set softtabstop=4
+set noexpandtab
+
+" Never execute modelines or local vimrc files from untrusted project trees.
+set nomodeline
+set noexrc
+
+if has('termguicolors')
+  set termguicolors
+endif
+
+syntax enable
+filetype plugin indent on
+
+highlight Normal guifg=#C8C8C8 guibg=#000000 ctermfg=252 ctermbg=0
+highlight NormalNC guifg=#C8C8C8 guibg=#000000 ctermfg=252 ctermbg=0
+highlight EndOfBuffer guifg=#000000 guibg=#000000 ctermfg=0 ctermbg=0
+highlight LineNr guifg=#606060 guibg=#000000 ctermfg=241 ctermbg=0
+highlight CursorLine guibg=#101010 ctermbg=NONE
+highlight CursorLineNr guifg=#FFFFFF guibg=#000000 gui=bold cterm=bold
+highlight StatusLine guifg=#000000 guibg=#C8C8C8 gui=NONE
+highlight StatusLineNC guifg=#808080 guibg=#181818 gui=NONE
+
+set statusline=%f%m%r%h%w\ %=%y\ %l:%c\ %p%%
+let mapleader=" "
+nnoremap <silent> <leader>w :write<CR>
+nnoremap <silent> <leader>q :quit<CR>
+nnoremap <silent> <leader>h :nohlsearch<CR>
+nnoremap <C-h> <C-w>h
+nnoremap <C-j> <C-w>j
+nnoremap <C-k> <C-w>k
+nnoremap <C-l> <C-w>l
+
+augroup ctf_filetypes
+  autocmd!
+  autocmd FileType python setlocal tabstop=4 shiftwidth=4 softtabstop=4 expandtab
+  autocmd FileType c,cpp setlocal tabstop=4 shiftwidth=4 softtabstop=4 noexpandtab
+  autocmd FileType asm setlocal tabstop=8 shiftwidth=8 softtabstop=8 noexpandtab
+augroup END

@@ -6,64 +6,52 @@ on:
     tags:
       - "v*"
 
+concurrency:
+  group: ova-${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: false
+
 permissions:
-  contents: write
+  contents: read
 
 jobs:
   ova:
     runs-on: ubuntu-24.04
+    timeout-minutes: 240
 
     steps:
       - name: Checkout Inception
-        uses: actions/checkout@v4
-
-      # nixos-config is private, so its deploy key must be added as the
-      # NIXOS_CONFIG_DEPLOY_KEY repository secret.
-      - name: Load nixos-config deploy key
-        uses: webfactory/ssh-agent@v0.9.1
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
-          ssh-private-key: ${{ secrets.NIXOS_CONFIG_DEPLOY_KEY }}
-
-      - name: Trust GitHub SSH host key
-        run: ssh-keyscan github.com >> "$HOME/.ssh/known_hosts"
+          persist-credentials: false
 
       - name: Install Nix
-        uses: cachix/install-nix-action@v31
-        with:
-          extra_nix_config: |
-            max-jobs = auto
-            cores = 2
-
-      - name: Cache Nix store
-        uses: actions/cache@v4
-        with:
-          path: |
-            /nix/store
-            /nix/var/nix/db
-          key: nix-store-${{ runner.os }}-${{ hashFiles('flake.lock', 'flake.nix', 'nix/**/*.nix') }}
-          restore-keys: |
-            nix-store-${{ runner.os }}-
+        uses: DeterminateSystems/determinate-nix-action@527f17dd63d2d60d3e5552934bc84b9a33a14d11 # v3.22.2
 
       - name: Build OVA
         run: nix build path:.#packages.x86_64-linux.vbox -o result-vbox --print-build-logs
 
       - name: Find OVA
         id: ova
+        shell: bash
         run: |
+          set -euo pipefail
           ova="$(find -L result-vbox -type f -name '*.ova' -print -quit)"
           test -n "$ova"
           echo "path=$ova" >> "$GITHUB_OUTPUT"
 
       - name: Split and verify OVA
+        shell: bash
         run: |
+          set -euo pipefail
           split -b 1900M "${{ steps.ova.outputs.path }}" inception.ova.part-
-          sha256sum "${{ steps.ova.outputs.path }}" | sed 's#^.*/##' > inception.ova.sha256
+          sha256sum "${{ steps.ova.outputs.path }}" \
+            | awk '{print $1 "  inception.ova"}' > inception.ova.sha256
           expected="$(awk '{print $1}' inception.ova.sha256)"
           actual="$(cat inception.ova.part-* | sha256sum | awk '{print $1}')"
           test "$actual" = "$expected"
 
       - name: Upload OVA artifact
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
         with:
           name: inception-ova
           path: |
@@ -72,11 +60,31 @@ jobs:
           if-no-files-found: error
           retention-days: 14
 
-      - name: Publish GitHub Release
-        if: startsWith(github.ref, 'refs/tags/v')
-        uses: softprops/action-gh-release@v2
+  release:
+    if: startsWith(github.ref, 'refs/tags/v')
+    needs: ova
+    runs-on: ubuntu-24.04
+    timeout-minutes: 15
+    permissions:
+      contents: write
+
+    steps:
+      - name: Download verified OVA artifact
+        uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c # v8.0.1
         with:
-          files: |
-            inception.ova.part-*
-            inception.ova.sha256
-          generate_release_notes: true
+          name: inception-ova
+          path: release-assets
+
+      - name: Publish GitHub Release
+        shell: bash
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          set -euo pipefail
+          assets=(release-assets/inception.ova.sha256 release-assets/inception.ova.part-*)
+          if gh release view "$GITHUB_REF_NAME" >/dev/null 2>&1; then
+            gh release upload "$GITHUB_REF_NAME" "${assets[@]}" --clobber
+          else
+            gh release create "$GITHUB_REF_NAME" "${assets[@]}" \
+              --title "$GITHUB_REF_NAME" --generate-notes
+          fi

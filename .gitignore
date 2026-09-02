@@ -4,8 +4,9 @@ result
 result-*
 *.qcow2
 
-srcs/.env
-secrets/
+secrets/*
+!secrets/.gitkeep
+!secrets/README.md
 *.key
 *.crt
 *.pem

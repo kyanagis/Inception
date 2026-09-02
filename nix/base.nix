@@ -5,6 +5,7 @@
 {
   allowUnfree ? false,
   hostName,
+  projectSource ? null,
   userName,
 }:
 {
@@ -21,6 +22,8 @@ let
     runtimeInputs = with pkgs; [
       coreutils
       gnugrep
+      openssl
+      util-linux
     ];
     text = ''
       if [ "$(id -u)" -ne 0 ]; then
@@ -46,24 +49,23 @@ let
       state_directory=${loginStateDirectory}
       bootstrap_home=/home/${userName}
 
-      install -d -m 0755 "$state_directory"
-      install -d -m 0750 -o ${userName} -g users "/home/$login" "$data_directory"
-
-      environment_file="$state_directory/environment.new"
-      printf '%s\n' \
-        "INCEPTION_LOGIN=$login" \
-        "DOMAIN_NAME=$domain" \
-        "INCEPTION_DATA_DIR=$data_directory" > "$environment_file"
-      chmod 0644 "$environment_file"
-      mv -f "$environment_file" "$state_directory/environment"
-
-      printf '%s\n' "$login" > "$state_directory/login"
-      chmod 0644 "$state_directory/login"
-
+      # Validate every condition that can be checked without changing state.
+      # The login file is the completion marker used by the GUI autostart, so
+      # it must never be written before the complete setup succeeds.
       if [ -e "$bootstrap_home/data" ] && [ ! -L "$bootstrap_home/data" ]; then
         echo "$bootstrap_home/data exists and is not a symlink; refusing to replace it" >&2
         exit 3
       fi
+
+      install -d -m 0755 "$state_directory"
+      install -d -m 0750 -o ${userName} -g users "/home/$login" "$data_directory"
+
+      project_directory="$bootstrap_home/Inception"
+      if [ -x "$project_directory/scripts/configure.sh" ]; then
+        runuser -u ${userName} -- "$project_directory/scripts/configure.sh" "$login"
+        runuser -u ${userName} -- "$project_directory/scripts/setup.sh"
+      fi
+
       ln -sfn "$data_directory" "$bootstrap_home/data"
       chown -h ${userName}:users "$bootstrap_home/data"
 
@@ -71,8 +73,26 @@ let
       # <login>.42.fr address works locally without modifying immutable /etc/hosts.
       printf '%s\n' "$domain" > /proc/sys/kernel/hostname
 
+      environment_file="$state_directory/environment.new"
+      login_file="$state_directory/login.new"
+      trap 'rm -f "$environment_file" "$login_file"' EXIT HUP INT TERM
+      printf '%s\n' \
+        "INCEPTION_LOGIN=$login" \
+        "DOMAIN_NAME=$domain" \
+        "INCEPTION_DATA_DIR=$data_directory" > "$environment_file"
+      printf '%s\n' "$login" > "$login_file"
+      chmod 0644 "$environment_file" "$login_file"
+      mv -f "$environment_file" "$state_directory/environment"
+      # Commit the completion marker last.  --first-login only skips setup
+      # after this final rename has succeeded.
+      mv -f "$login_file" "$state_directory/login"
+      trap - EXIT HUP INT TERM
+
       printf 'Configured 42 login: %s\nDomain: %s\nData: %s\n' \
         "$login" "$domain" "$data_directory"
+      if [ -x "$project_directory/scripts/configure.sh" ]; then
+        printf 'Project configured: %s\n' "$project_directory"
+      fi
     '';
   };
 
@@ -138,6 +158,13 @@ in
     firewall.allowedTCPPorts = [
       22
       443
+      2121
+    ];
+    firewall.allowedTCPPortRanges = [
+      {
+        from = 21100;
+        to = 21110;
+      }
     ];
   };
 
@@ -162,7 +189,7 @@ in
   };
 
   users = {
-    mutableUsers = false;
+    mutableUsers = true;
     users.${userName} = {
       isNormalUser = true;
       description = userName;
@@ -196,7 +223,20 @@ in
     };
   };
 
-  security.sudo.wheelNeedsPassword = false;
+  security.sudo = {
+    wheelNeedsPassword = true;
+    extraRules = [
+      {
+        users = [ userName ];
+        commands = [
+          {
+            command = "${applyLogin}/bin/inception-apply-login";
+            options = [ "NOPASSWD" ];
+          }
+        ];
+      }
+    ];
+  };
   services.getty.autologinUser = userName;
   services.displayManager.autoLogin = {
     enable = true;
@@ -204,6 +244,24 @@ in
   };
 
   systemd = {
+    services.inception-project = lib.mkIf (projectSource != null) {
+      description = "Install the Inception project into the appliance home";
+      wantedBy = [ "multi-user.target" ];
+      before = [ "display-manager.service" ];
+      after = [ "local-fs.target" ];
+      serviceConfig.Type = "oneshot";
+      script = ''
+        target=/home/${userName}/Inception
+        if [ ! -e "$target/Makefile" ]; then
+          install -d -o ${userName} -g users -m 0755 "$target"
+          cp -a --no-preserve=ownership ${projectSource}/. "$target/"
+          chown -R ${userName}:users "$target"
+          chmod -R u+rwX,go+rX,go-w "$target"
+          chmod 0755 "$target/scripts/"*.sh
+        fi
+      '';
+    };
+
     services.inception-login-state = {
       description = "Restore the configured Inception 42 login";
       wantedBy = [ "multi-user.target" ];
@@ -236,6 +294,7 @@ in
     docker-compose
     git
     gnumake
+    ripgrep
     setupLogin
     openssl
     vim

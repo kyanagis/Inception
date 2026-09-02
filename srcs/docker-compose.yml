@@ -1,0 +1,319 @@
+name: inception
+
+x-security: &default-security
+  restart: unless-stopped
+  init: true
+  security_opt:
+    - no-new-privileges:true
+
+services:
+  mariadb:
+    <<: *default-security
+    image: mariadb:inception
+    build:
+      context: requirements/mariadb
+      dockerfile: Dockerfile
+    environment:
+      MYSQL_DATABASE: ${MYSQL_DATABASE}
+      MYSQL_USER: ${MYSQL_USER}
+    secrets:
+      - db_password
+      - db_root_password
+    volumes:
+      - mariadb_data:/var/lib/mysql
+    networks:
+      - backend
+    read_only: true
+    tmpfs:
+      - /run/mysqld:mode=0755
+      - /tmp:mode=1777
+    cap_drop:
+      - ALL
+    cap_add:
+      - CHOWN
+      - DAC_OVERRIDE
+      - SETGID
+      - SETUID
+    healthcheck:
+      test: ["CMD", "mariadb-admin", "ping", "--host=127.0.0.1", "--silent"]
+      interval: 5s
+      timeout: 3s
+      retries: 20
+      start_period: 20s
+
+  wordpress:
+    <<: *default-security
+    image: wordpress:inception
+    build:
+      context: requirements/wordpress
+      dockerfile: Dockerfile
+      args:
+        WORDPRESS_VERSION: "7.1"
+        WORDPRESS_SHA256: 05a5f89138f632b7329f1202f2a0553c5f7fe4daf8e4b9ca7ebae9b9466b9e86
+        WP_CLI_VERSION: "2.12.0"
+        WP_CLI_SHA256: ce34ddd838f7351d6759068d09793f26755463b4a4610a5a5c0a97b68220d85c
+        REDIS_PLUGIN_VERSION: "2.6.0"
+        REDIS_PLUGIN_SHA256: da6a4c388771843e90b8acf91ce74f1eccf87fe459e3782212a4c9d570136651
+    environment:
+      DOMAIN_NAME: ${DOMAIN_NAME}
+      MYSQL_DATABASE: ${MYSQL_DATABASE}
+      MYSQL_USER: ${MYSQL_USER}
+      WP_TITLE: ${WP_TITLE}
+      WP_ADMIN_USER: ${WP_ADMIN_USER}
+      WP_ADMIN_EMAIL: ${WP_ADMIN_EMAIL}
+      WP_USER: ${WP_USER}
+      WP_USER_EMAIL: ${WP_USER_EMAIL}
+    secrets:
+      - db_password
+      - wp_admin_password
+      - wp_user_password
+    volumes:
+      - wordpress_data:/var/www/html
+    networks:
+      - frontend
+      - backend
+    depends_on:
+      mariadb:
+        condition: service_healthy
+    read_only: true
+    tmpfs:
+      - /run/php:mode=0755
+      - /tmp:mode=1777
+    cap_drop:
+      - ALL
+    cap_add:
+      - CHOWN
+      - DAC_OVERRIDE
+      - SETGID
+      - SETUID
+    healthcheck:
+      test: ["CMD", "nc", "-z", "127.0.0.1", "9000"]
+      interval: 5s
+      timeout: 3s
+      retries: 20
+      start_period: 30s
+
+  nginx:
+    <<: *default-security
+    image: nginx:inception
+    build:
+      context: requirements/nginx
+      dockerfile: Dockerfile
+    environment:
+      DOMAIN_NAME: ${DOMAIN_NAME}
+    secrets:
+      - tls_certificate
+      - tls_private_key
+    volumes:
+      - wordpress_data:/var/www/html:ro
+    networks:
+      - frontend
+      - edge
+    ports:
+      - "443:443"
+    depends_on:
+      wordpress:
+        condition: service_healthy
+    read_only: true
+    tmpfs:
+      - /run:mode=0755
+      - /var/cache/nginx:mode=0755
+      - /var/lib/nginx:mode=0755
+      - /tmp:mode=1777
+    cap_drop:
+      - ALL
+    cap_add:
+      - CHOWN
+      - DAC_READ_SEARCH
+      - NET_BIND_SERVICE
+      - SETGID
+      - SETUID
+    healthcheck:
+      test: ["CMD", "curl", "--fail", "--insecure", "--silent", "https://127.0.0.1/healthz"]
+      interval: 10s
+      timeout: 3s
+      retries: 10
+
+  redis:
+    <<: *default-security
+    profiles: ["bonus"]
+    image: redis:inception
+    build:
+      context: requirements/bonus/redis
+      dockerfile: Dockerfile
+    networks:
+      - backend
+    read_only: true
+    tmpfs:
+      - /run/redis:mode=0755,uid=101,gid=101
+      - /tmp:mode=1777
+    cap_drop: ["ALL"]
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 5s
+      timeout: 3s
+      retries: 10
+
+  ftp:
+    <<: *default-security
+    profiles: ["bonus"]
+    image: ftp:inception
+    build:
+      context: requirements/bonus/ftp
+      dockerfile: Dockerfile
+    environment:
+      FTP_USER: ${FTP_USER}
+      FTP_PASV_MIN_PORT: ${FTP_PASV_MIN_PORT}
+      FTP_PASV_MAX_PORT: ${FTP_PASV_MAX_PORT}
+    secrets:
+      - ftp_password
+      - tls_certificate
+      - tls_private_key
+    volumes:
+      - wordpress_data:/srv/wordpress
+    networks:
+      - frontend
+      - edge
+    ports:
+      - "${FTP_PORT}:2121"
+      - "${FTP_PASV_MIN_PORT}-${FTP_PASV_MAX_PORT}:${FTP_PASV_MIN_PORT}-${FTP_PASV_MAX_PORT}"
+    read_only: true
+    tmpfs:
+      - /run/proftpd:mode=0755
+      - /tmp:mode=1777
+    cap_drop: ["ALL"]
+    cap_add: ["CHOWN", "DAC_OVERRIDE", "DAC_READ_SEARCH", "NET_BIND_SERVICE", "SETGID", "SETUID", "SYS_CHROOT"]
+
+  static-site:
+    <<: *default-security
+    profiles: ["bonus"]
+    image: static-site:inception
+    build:
+      context: requirements/bonus/static-site
+      dockerfile: Dockerfile
+    ports:
+      - "127.0.0.1:8081:8080"
+    networks:
+      - frontend
+      - edge
+    read_only: true
+    tmpfs:
+      - /run/lighttpd:mode=0755,uid=33,gid=33
+      - /var/cache/lighttpd:mode=0755,uid=33,gid=33
+      - /tmp:mode=1777
+    cap_drop: ["ALL"]
+    healthcheck:
+      test: ["CMD", "wget", "--spider", "--quiet", "http://127.0.0.1:8080/"]
+      interval: 10s
+      timeout: 3s
+      retries: 10
+
+  adminer:
+    <<: *default-security
+    profiles: ["bonus"]
+    image: adminer:inception
+    build:
+      context: requirements/bonus/adminer
+      dockerfile: Dockerfile
+      args:
+        ADMINER_VERSION: "6.0.1"
+        ADMINER_SHA256: c820771612aedd70b26b8f75f442cc9fc118f8225d0166cc6c5909a89f314805
+    ports:
+      - "127.0.0.1:8080:8080"
+    networks:
+      - backend
+      - edge
+    depends_on:
+      mariadb:
+        condition: service_healthy
+    read_only: true
+    tmpfs:
+      - /run/lighttpd:mode=0755,uid=33,gid=33
+      - /var/cache/lighttpd:mode=0755,uid=33,gid=33
+      - /tmp:mode=1777,uid=33,gid=33
+    cap_drop: ["ALL"]
+    healthcheck:
+      test: ["CMD", "wget", "--spider", "--quiet", "http://127.0.0.1:8080/"]
+      interval: 10s
+      timeout: 3s
+      retries: 10
+
+  backup:
+    <<: *default-security
+    profiles: ["bonus"]
+    image: backup:inception
+    build:
+      context: requirements/bonus/backup
+      dockerfile: Dockerfile
+    environment:
+      BACKUP_SCHEDULE: ${BACKUP_SCHEDULE}
+      MYSQL_DATABASE: ${MYSQL_DATABASE}
+      MYSQL_USER: ${MYSQL_USER}
+    secrets:
+      - db_password
+    volumes:
+      - wordpress_data:/source/wordpress:ro
+      - backup_data:/backups
+    networks:
+      - backend
+    depends_on:
+      mariadb:
+        condition: service_healthy
+    read_only: true
+    tmpfs:
+      - /run:mode=0755
+      - /tmp:mode=1777
+    cap_drop: ["ALL"]
+    cap_add: ["DAC_OVERRIDE", "DAC_READ_SEARCH"]
+
+networks:
+  frontend:
+    name: inception_frontend
+    driver: bridge
+    internal: true
+  backend:
+    name: inception_backend
+    driver: bridge
+    internal: true
+  edge:
+    name: inception_edge
+    driver: bridge
+
+volumes:
+  wordpress_data:
+    name: inception_wordpress_data
+    driver: local
+    driver_opts:
+      type: none
+      o: bind
+      device: ${DATA_PATH}/wordpress
+  mariadb_data:
+    name: inception_mariadb_data
+    driver: local
+    driver_opts:
+      type: none
+      o: bind
+      device: ${DATA_PATH}/mariadb
+  backup_data:
+    name: inception_backup_data
+    driver: local
+    driver_opts:
+      type: none
+      o: bind
+      device: ${DATA_PATH}/backups
+
+secrets:
+  db_password:
+    file: ../secrets/db_password.txt
+  db_root_password:
+    file: ../secrets/db_root_password.txt
+  wp_admin_password:
+    file: ../secrets/wp_admin_password.txt
+  wp_user_password:
+    file: ../secrets/wp_user_password.txt
+  ftp_password:
+    file: ../secrets/ftp_password.txt
+  tls_certificate:
+    file: ../secrets/tls_certificate.pem
+  tls_private_key:
+    file: ../secrets/tls_private_key.pem

@@ -1,0 +1,6 @@
+**
+!Dockerfile
+!conf/php-fpm.conf
+!conf/php.ini
+!conf/www.conf
+!tools/entrypoint.sh

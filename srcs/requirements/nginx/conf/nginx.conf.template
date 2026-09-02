@@ -1,0 +1,73 @@
+user www-data;
+worker_processes auto;
+pid /run/nginx.pid;
+error_log /dev/stderr warn;
+
+events {
+    worker_connections 1024;
+}
+
+http {
+    include /etc/nginx/mime.types;
+    default_type application/octet-stream;
+    access_log /dev/stdout;
+    server_tokens off;
+    sendfile on;
+    keepalive_timeout 30;
+    client_max_body_size 64m;
+
+    server {
+        listen 443 ssl;
+        listen [::]:443 ssl;
+        server_name __DOMAIN_NAME__;
+        root /var/www/html;
+        index index.php index.html;
+
+        ssl_certificate /run/secrets/tls_certificate;
+        ssl_certificate_key /run/secrets/tls_private_key;
+        ssl_protocols TLSv1.2 TLSv1.3;
+        ssl_ciphers ECDHE-ECDSA-AES256-GCM-SHA384:ECDHE-ECDSA-CHACHA20-POLY1305:ECDHE-ECDSA-AES128-GCM-SHA256;
+        ssl_prefer_server_ciphers off;
+        ssl_session_cache shared:TLS:10m;
+        ssl_session_timeout 1d;
+        ssl_session_tickets off;
+
+        add_header Strict-Transport-Security "max-age=31536000" always;
+        add_header X-Content-Type-Options nosniff always;
+        add_header X-Frame-Options SAMEORIGIN always;
+        add_header Referrer-Policy strict-origin-when-cross-origin always;
+        add_header Permissions-Policy "camera=(), microphone=(), geolocation=()" always;
+
+        location = /healthz {
+            access_log off;
+            default_type text/plain;
+            return 200 "ok\n";
+        }
+
+        location / {
+            try_files $uri $uri/ /index.php?$args;
+        }
+
+        # NGINX uses the first matching regular-expression location.  Keep
+        # every PHP/sensitive-file deny rule before the generic PHP handler.
+        location ~* /(?:uploads|files)/.*\.php$ { deny all; }
+        location ~* /(?:\.git|\.env|wp-config\.php|readme\.html|license\.txt) { deny all; }
+
+        location ~ \.php$ {
+            try_files $uri =404;
+            include /etc/nginx/fastcgi_params;
+            fastcgi_pass wordpress:9000;
+            fastcgi_index index.php;
+            fastcgi_param SCRIPT_FILENAME $document_root$fastcgi_script_name;
+            fastcgi_param HTTPS on;
+            fastcgi_param HTTP_PROXY "";
+            fastcgi_read_timeout 120s;
+        }
+
+        location ~* \.(?:css|js|jpg|jpeg|gif|png|webp|svg|ico|woff2?)$ {
+            expires 7d;
+            access_log off;
+            try_files $uri /index.php?$args;
+        }
+    }
+}
