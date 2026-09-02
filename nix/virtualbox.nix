@@ -12,6 +12,8 @@
 let
   cfg = config.virtualbox;
   userName = "inception";
+  setupGuide = ./config/INCEPTION-SETUP.txt;
+  sshGuide = ./config/SSH-SETUP.txt;
   kittyConf = pkgs.writeText "inception-kitty.conf" ''
     confirm_os_window_close 0
     enable_audio_bell no
@@ -115,7 +117,7 @@ let
     # environment is usable.  Give XFCE its own session bus deterministically.
     unset DBUS_SESSION_BUS_ADDRESS
     export XDG_CONFIG_DIRS="${pkgs.xfce4-session}/etc/xdg:/etc/xdg:/run/current-system/sw/etc/xdg"
-    export XDG_DATA_DIRS="${pkgs.xfce4-session}/share:/run/current-system/sw/share:/usr/local/share:/usr/share"
+    export XDG_DATA_DIRS="/home/${userName}/.nix-profile/share:${pkgs.xfce4-session}/share:/run/current-system/sw/share:/usr/local/share:/usr/share"
     exec ${pkgs.dbus}/bin/dbus-run-session -- ${pkgs.bash}/bin/bash -c '
       ${pkgs.xfconf}/lib/xfce4/xfconf/xfconfd &
       xfconfd_pid=$!
@@ -146,7 +148,7 @@ in
     # D-Bus session configuration.
     xserver.displayManager.sessionCommands = ''
       export XDG_CONFIG_DIRS="${pkgs.xfce4-session}/etc/xdg:/etc/xdg:$XDG_CONFIG_DIRS"
-      export XDG_DATA_DIRS="${pkgs.xfce4-session}/share:${pkgs.xfce4-session}/share:$XDG_DATA_DIRS"
+      export XDG_DATA_DIRS="$HOME/.nix-profile/share:${pkgs.xfce4-session}/share:/run/current-system/sw/share:$XDG_DATA_DIRS"
     '';
     dbus.enable = true;
   };
@@ -156,7 +158,7 @@ in
   environment = {
     sessionVariables = {
       XDG_CONFIG_DIRS = lib.mkForce "${pkgs.xfce4-session}/etc/xdg:/etc/xdg";
-      XDG_DATA_DIRS = lib.mkForce "${pkgs.xfce4-session}/share:/usr/local/share:/usr/share";
+      XDG_DATA_DIRS = lib.mkForce "/home/${userName}/.nix-profile/share:${pkgs.xfce4-session}/share:/run/current-system/sw/share:/usr/local/share:/usr/share";
     };
     etc."xdg/autostart/inception-setup.desktop".text = ''
       [Desktop Entry]
@@ -222,7 +224,7 @@ in
   environment.etc."zsh/inception.zshrc".source = zshConf;
 
   systemd.services.inception-user-config = {
-    description = "Install portable shell, Kitty, and Vim configuration";
+    description = "Install Inception desktop guides and portable user configuration";
     wantedBy = [ "multi-user.target" ];
     before = [ "display-manager.service" ];
     after = [ "local-fs.target" ];
@@ -234,6 +236,7 @@ in
       install -d -o ${userName} -g users -m 0755 /home/${userName}/.local/share
       install -d -o ${userName} -g users -m 0755 /home/${userName}/.local/state
       install -d -o ${userName} -g users -m 0755 /home/${userName}/.config/kitty
+      install -d -o ${userName} -g users -m 0755 /home/${userName}/Desktop
       if [ ! -e /home/${userName}/.config/kitty/kitty.conf ]; then
         install -o ${userName} -g users -m 0644 ${kittyConf} /home/${userName}/.config/kitty/kitty.conf
       fi
@@ -244,6 +247,8 @@ in
         install -o ${userName} -g users -m 0644 ${zshConf} /home/${userName}/.zshrc
       fi
       install -o ${userName} -g users -m 0755 ${xfceSession} /home/${userName}/.xsession
+      install -o ${userName} -g users -m 0644 ${setupGuide} /home/${userName}/Desktop/INCEPTION-SETUP.txt
+      install -o ${userName} -g users -m 0644 ${sshGuide} /home/${userName}/Desktop/SSH-SETUP.txt
     '';
   };
 

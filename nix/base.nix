@@ -151,6 +151,104 @@ let
             fi
     '';
   };
+
+  sshSetup = pkgs.writeShellApplication {
+    name = "ssh-setup";
+    runtimeInputs = with pkgs; [
+      coreutils
+      gnugrep
+      iproute2
+      openssh
+      systemd
+    ];
+    text = ''
+      if [ "$(id -un)" != "${userName}" ]; then
+        echo "ssh-setup must run as ${userName}, not as root or another user" >&2
+        exit 1
+      fi
+
+      ssh_directory="$HOME/.ssh"
+      authorized_keys="$ssh_directory/authorized_keys"
+
+      show_status() {
+        printf 'sshd: '
+        systemctl is-active sshd.service || true
+        if [ -s "$authorized_keys" ]; then
+          echo "Authorized public keys:"
+          ssh-keygen -lf "$authorized_keys" || true
+        else
+          echo "Authorized public keys: none"
+        fi
+        echo "VM addresses:"
+        ip -brief address show scope global || true
+      }
+
+      case "''${1:-}" in
+        --status)
+          [ "$#" -eq 1 ] || { echo "Usage: ssh-setup --status" >&2; exit 2; }
+          show_status
+          exit 0
+          ;;
+        --help|-h)
+          echo "Usage: ssh-setup [PUBLIC_KEY_FILE]"
+          echo "       ssh-setup --status"
+          exit 0
+          ;;
+      esac
+
+      if [ "$#" -gt 1 ]; then
+        echo "Usage: ssh-setup [PUBLIC_KEY_FILE]" >&2
+        exit 2
+      fi
+
+      if [ "$#" -eq 1 ]; then
+        [ -f "$1" ] && [ -r "$1" ] || { echo "Cannot read public key file: $1" >&2; exit 2; }
+        mapfile -t public_key_lines < "$1"
+        if [ "''${#public_key_lines[@]}" -ne 1 ]; then
+          echo "The public key file must contain exactly one line" >&2
+          exit 2
+        fi
+        public_key="''${public_key_lines[0]}"
+      else
+        echo "Paste one SSH public-key line, then press Enter:" >&2
+        if ! IFS= read -r public_key; then
+          echo "No public key was received" >&2
+          exit 2
+        fi
+      fi
+      public_key=$(printf '%s' "$public_key" | tr -d '\r')
+      [ -n "$public_key" ] || { echo "The public key is empty" >&2; exit 2; }
+
+      validation_file=$(mktemp)
+      trap 'rm -f "$validation_file"' EXIT HUP INT TERM
+      printf '%s\n' "$public_key" > "$validation_file"
+      if ! fingerprint=$(ssh-keygen -lf "$validation_file" 2>/dev/null); then
+        echo "Invalid SSH public key" >&2
+        exit 2
+      fi
+
+      if [ -L "$ssh_directory" ] || [ -L "$authorized_keys" ]; then
+        echo "Refusing to update a symlinked SSH directory or authorized_keys file" >&2
+        exit 3
+      fi
+      install -d -m 0700 "$ssh_directory"
+      candidate_file=$(mktemp "$ssh_directory/.authorized_keys.XXXXXX")
+      if [ -f "$authorized_keys" ]; then
+        cat "$authorized_keys" > "$candidate_file"
+      fi
+      if ! grep -Fqx -- "$public_key" "$candidate_file"; then
+        printf '%s\n' "$public_key" >> "$candidate_file"
+      fi
+      chmod 0600 "$candidate_file"
+      mv -f "$candidate_file" "$authorized_keys"
+      rm -f "$validation_file"
+      trap - EXIT HUP INT TERM
+
+      printf 'SSH public key installed: %s\n' "$fingerprint"
+      echo "Password and root SSH logins remain disabled."
+      show_status
+    '';
+  };
 in
 {
   networking = {
@@ -242,6 +340,19 @@ in
     enable = true;
     user = userName;
   };
+  services.openssh = {
+    enable = true;
+    openFirewall = false;
+    settings = {
+      KbdInteractiveAuthentication = false;
+      PasswordAuthentication = false;
+      PermitRootLogin = "no";
+      X11Forwarding = false;
+    };
+    extraConfig = ''
+      AllowUsers ${userName}
+    '';
+  };
 
   systemd = {
     services.inception-project = lib.mkIf (projectSource != null) {
@@ -296,6 +407,7 @@ in
     gnumake
     ripgrep
     setupLogin
+    sshSetup
     openssl
     vim
   ];

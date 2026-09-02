@@ -1,0 +1,78 @@
+Inception VM 利用手順
+=====================
+
+1. 最初に行うこと
+-----------------
+
+OSアカウント名は inception、OVAの初期パスワードも inception です。
+最初にTerminal（Win+Enter）を開き、固有のOSパスワードへ変更してください。
+
+    passwd
+
+初回ログイン時の設定画面へ自分の42 loginを入力します。画面を閉じた場合は、
+Terminalから次を実行できます。
+
+    inception-setup YOUR_42_LOGIN
+
+これにより次が設定されます。
+
+    /home/YOUR_42_LOGIN/data
+    YOUR_42_LOGIN.42.fr
+    INCEPTION_LOGIN, DOMAIN_NAME, INCEPTION_DATA_DIR
+
+設定後は新しいTerminalを開いてください。
+
+2. Inceptionの起動
+------------------
+
+    cd /home/inception/Inception
+    make up
+    make status
+    ./scripts/smoke-test.sh
+
+Browserで次を開きます。
+
+    https://YOUR_42_LOGIN.42.fr
+
+自己署名証明書なので警告が表示されます。証明書のfingerprintを確認してから
+例外を承認してください。local secretは /home/inception/Inception/secrets/ にあり、
+公開repositoryやスクリーンショットへ含めないでください。
+
+Bonusを含めて起動する場合:
+
+    make bonus
+
+3. Google ChromeとVisual Studio Code
+-------------------------------------
+
+ChromeとVS CodeはライセンスとOVA容量の都合で同梱していません。Internet接続後、
+各ソフトウェアのライセンスを確認したうえで次を実行してください。
+
+    NIXPKGS_ALLOW_UNFREE=1 nix profile install --impure \
+      nixpkgs#google-chrome \
+      nixpkgs#vscode
+
+導入後は一度ログアウトし、再ログインしてください。アプリケーション一覧から起動でき、
+Terminalでは次のコマンドも利用できます。
+
+    google-chrome-stable
+    code
+
+更新する場合:
+
+    NIXPKGS_ALLOW_UNFREE=1 nix profile upgrade --impure '.*'
+
+削除する場合は `nix profile list` でentryを確認し、`nix profile remove` を使用します。
+
+4. よく使うコマンド
+--------------------
+
+    make status      serviceとhealthの確認
+    make logs        logの追跡
+    make down        dataを保持して停止・container削除
+    make fclean      container、image、named volume objectを削除
+    ssh-setup        SSH公開鍵を登録
+    ssh-setup --status
+
+`make fclean` 後もhost側の /home/YOUR_42_LOGIN/data 内の実データは自動削除しません。
+永続データを手動削除する前にbackupを確認してください。
