@@ -34,6 +34,10 @@ printf '%s\n' "$published" | awk '
 
 curl --fail --silent --show-error --cacert secrets/tls_certificate.pem \
   --resolve "$DOMAIN_NAME:443:127.0.0.1" "https://$DOMAIN_NAME/" >/dev/null
+[ "$(curl --silent --insecure --output /dev/null --write-out '%{http_code}' \
+  --resolve invalid.example:443:127.0.0.1 https://invalid.example/)" = 421 ]
+[ "$(curl --silent --cacert secrets/tls_certificate.pem --output /dev/null --write-out '%{http_code}' \
+  --resolve "$DOMAIN_NAME:443:127.0.0.1" "https://$DOMAIN_NAME/xmlrpc.php")" = 403 ]
 
 ./srcs/tools/verify-tls.sh
 
@@ -49,6 +53,11 @@ user_count=$($compose exec -T --user www-data wordpress wp user list --field=use
 admin_name=$($compose exec -T --user www-data wordpress wp user list --role=administrator --field=user_login --path=/var/www/html)
 case "$admin_name" in *[Aa][Dd][Mm][Ii][Nn]*) echo 'Administrator login contains prohibited admin substring' >&2; exit 1;; esac
 $compose exec -T --user www-data wordpress wp core verify-checksums --path=/var/www/html >/dev/null
+$compose exec -T wordpress sh -ec '
+  test "$(stat -c %U:%G /var/www/html/wp-settings.php)" = root:www-data
+  test ! -w /var/www/html/wp-settings.php
+  test "$(stat -c %U:%G /var/www/html/wp-content/uploads)" = www-data:www-data
+'
 [ "$($compose exec -T --user www-data wordpress wp option get home --path=/var/www/html)" = "https://$DOMAIN_NAME" ]
 [ "$($compose exec -T --user www-data wordpress wp option get siteurl --path=/var/www/html)" = "https://$DOMAIN_NAME" ]
 $compose exec -T mariadb mariadb-healthcheck
