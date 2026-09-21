@@ -172,6 +172,7 @@ services:
     cpus: 0.5
     pids_limit: 128
     cap_drop: ["ALL"]
+    cap_add: ["CHOWN", "SETGID", "SETUID"]
     healthcheck:
       test: ["CMD", "/usr/local/bin/redis-healthcheck"]
       interval: 5s
