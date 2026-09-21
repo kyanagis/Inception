@@ -17,7 +17,7 @@ permissions:
   contents: write
 
 jobs:
-  ova:
+  build:
     runs-on: ubuntu-24.04
 
     steps:
@@ -44,18 +44,48 @@ jobs:
       - name: Build OVA
         run: nix build path:.#packages.x86_64-linux.vbox -o result-vbox --print-build-logs
 
-      - name: Find OVA
-        id: ova
+      - name: Split OVA for reusable artifact
         run: |
           ova="$(find -L result-vbox -type f -name '*.ova' -print -quit)"
           test -n "$ova"
-          echo "path=$ova" >> "$GITHUB_OUTPUT"
+          split -b 1900M "$ova" inception.ova.part-
 
-      - name: Split and verify OVA
+          shopt -s nullglob
+          parts=(inception.ova.part-*)
+          test "${#parts[@]}" -gt 0
+
+      - name: Preserve built OVA parts immediately
+        uses: actions/upload-artifact@v4
+        with:
+          name: inception-ova-parts
+          path: inception.ova.part-*
+          if-no-files-found: error
+          retention-days: 14
+          overwrite: true
+
+  package:
+    needs: build
+    runs-on: ubuntu-24.04
+
+    steps:
+      - name: Checkout Inception
+        uses: actions/checkout@v4
+
+      - name: Restore built OVA parts
+        uses: actions/download-artifact@v4
+        with:
+          name: inception-ova-parts
+          path: .
+
+      - name: Create and verify checksum
         run: |
-          split -b 1900M "${{ steps.ova.outputs.path }}" inception.ova.part-
-          sha256sum "${{ steps.ova.outputs.path }}" | sed 's#^.*/##' > inception.ova.sha256
-          expected="$(awk '{print $1}' inception.ova.sha256)"
+          shopt -s nullglob
+          parts=(inception.ova.part-*)
+          test "${#parts[@]}" -gt 0
+
+          expected="$(cat inception.ova.part-* | sha256sum | awk '{print $1}')"
+          printf '%s  inception.ova\n' "$expected" > inception.ova.sha256
+
           actual="$(cat inception.ova.part-* | sha256sum | awk '{print $1}')"
           test "$actual" = "$expected"
 
@@ -65,7 +95,7 @@ jobs:
           結合後のSHA-256: $expected
           EOF
 
-      - name: Upload OVA artifact
+      - name: Upload packaged OVA artifact
         uses: actions/upload-artifact@v4
         with:
           name: inception-ova
@@ -74,6 +104,7 @@ jobs:
             inception.ova.sha256
           if-no-files-found: error
           retention-days: 14
+          overwrite: true
 
       - name: Move ova-latest tag
         if: github.ref == 'refs/heads/main'
