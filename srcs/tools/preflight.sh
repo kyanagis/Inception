@@ -18,7 +18,8 @@ case "$login" in ''|[!a-z]*|*[!a-z0-9-]*|*-|root|inception) fail 'Invalid 42 log
 docker_local() { docker --host unix:///var/run/docker.sock "$@"; }
 info=$(docker_local info --format '{{json .}}') || fail 'Cannot access local Docker; run make host-setup LOGIN=... in the dedicated VM'
 printf '%s' "$info" | jq -e '.SecurityOptions | all(.[]; contains("rootless") | not)' >/dev/null || fail 'Rootless Docker is outside the supported host contract'
-[ "$(printf '%s' "$info" | jq -r .DockerRootDir)" = "$data_path/docker" ] || fail "Docker data-root must be $data_path/docker; run make host-setup LOGIN=$login"
+docker_root=$(printf '%s' "$info" | jq -r .DockerRootDir)
+[ "$(realpath -m -- "$docker_root")" = "$data_path/docker" ] || fail "Docker data-root must resolve to $data_path/docker; run make host-setup LOGIN=$login"
 engine_version=$(docker_local version --format '{{.Server.Version}}')
 compose_version=$(docker_local compose version --short)
 [ "$(printf '%s\n' 27.0.3 "$engine_version" | sort -V | head -n 1)" = 27.0.3 ] || fail 'Docker Engine >=27.0.3 is required'
@@ -28,8 +29,10 @@ for logical in mariadb_data wordpress_data backup_data; do
   name=inception_$logical
   if printf '%s\n' "$existing_volumes" | grep -Fx "$name" >/dev/null; then
     volume=$(docker_local volume inspect "$name") || fail "Cannot inspect existing volume $name"
-    printf '%s' "$volume" | jq -e --arg name "$name" --arg logical "$logical" --arg path "$data_path/docker/volumes/$name/_data" \
-      'length == 1 and .[0].Name == $name and .[0].Driver == "local" and ((.[0].Options // {}) == {}) and .[0].Mountpoint == $path and .[0].Labels["com.docker.compose.project"] == "inception" and .[0].Labels["com.docker.compose.volume"] == $logical' >/dev/null || fail "Volume $name has unexpected ownership, driver, options or location"
+    printf '%s' "$volume" | jq -e --arg name "$name" --arg logical "$logical" \
+      'length == 1 and .[0].Name == $name and .[0].Driver == "local" and ((.[0].Options // {}) == {}) and .[0].Labels["com.docker.compose.project"] == "inception" and .[0].Labels["com.docker.compose.volume"] == $logical' >/dev/null || fail "Volume $name has unexpected ownership, driver, options or labels"
+    mountpoint=$(printf '%s' "$volume" | jq -r '.[0].Mountpoint')
+    [ "$(realpath -m -- "$mountpoint")" = "$data_path/docker/volumes/$name/_data" ] || fail "Volume $name is outside the configured data path"
   fi
 done
 getent ahostsv4 "$domain" | awk '$1 == "127.0.0.1" {ok=1} END {exit !ok}' || fail "$domain must resolve locally; run make host-setup LOGIN=$login"
