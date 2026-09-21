@@ -55,8 +55,6 @@ jobs:
 
       - name: Validate OVA manifest and VirtualBox import
         shell: bash
-        env:
-          NIXPKGS_ALLOW_UNFREE: "1"
         run: |
           set -euo pipefail
           inspect="$RUNNER_TEMP/ova-inspect"
@@ -71,8 +69,7 @@ jobs:
             actual="$(sha256sum "$inspect/$file" | awk '{print $1}')"
             test "${actual,,}" = "${expected,,}"
           done < "$manifest"
-          nix build --impure nixpkgs#virtualbox -o result-virtualbox
-          result-virtualbox/bin/VBoxManage import "${{ steps.ova.outputs.path }}" --dry-run
+          nix build path:.#packages.x86_64-linux.ova-import-check -L
 
       - name: Split and verify OVA
         shell: bash

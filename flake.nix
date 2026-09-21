@@ -49,6 +49,14 @@
       packages.${system} = {
         default = vbox.config.system.build.image;
         vbox = vbox.config.system.build.image;
+        ova-import-check = pkgs.runCommand "inception-ova-import-check" {
+          nativeBuildInputs = [ pkgs.virtualbox ];
+        } ''
+          export HOME="$TMPDIR"
+          ova=$(find ${vbox.config.system.build.image} -type f -name '*.ova' -print -quit)
+          test -n "$ova"
+          VBoxManage import "$ova" --dry-run > "$out"
+        '';
       };
 
       checks.${system} = {
