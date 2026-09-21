@@ -4,7 +4,8 @@ umask 077
 
 : "${MYSQL_DATABASE:?MYSQL_DATABASE is required}"
 : "${MYSQL_USER:?MYSQL_USER is required}"
-case "$MYSQL_DATABASE:$MYSQL_USER" in *[!A-Za-z0-9_:]*) echo 'Invalid database identifiers' >&2; exit 2;; esac
+: "${MYSQL_BACKUP_USER:?MYSQL_BACKUP_USER is required}"
+case "$MYSQL_DATABASE:$MYSQL_USER:$MYSQL_BACKUP_USER" in *[!A-Za-z0-9_:]*) echo 'Invalid database identifiers' >&2; exit 2;; esac
 retention=${BACKUP_RETENTION_DAYS:-7}
 case "$retention" in ''|*[!0-9]*) echo 'Invalid backup retention' >&2; exit 2;; esac
 [ "$retention" -ge 1 ] && [ "$retention" -le 3650 ] || { echo 'Invalid backup retention' >&2; exit 2; }
@@ -37,7 +38,7 @@ printf '%s STARTED backup\n' "$(date -u +%FT%TZ)" >&2
 /usr/local/bin/backup-manifest prune-partial /backups
 /usr/local/bin/backup-manifest check-source /source
 
-[ -f /run/secrets/db_password ] && [ -r /run/secrets/db_password ] || { echo 'Missing database secret' >&2; exit 1; }
+[ -f /run/secrets/db_backup_password ] && [ -r /run/secrets/db_backup_password ] || { echo 'Missing database secret' >&2; exit 1; }
 client_file=$(mktemp /run/backup-client.XXXXXXXXXX)
 /usr/local/bin/backup-manifest client-options "$client_file"
 unsupported=$(mariadb --defaults-extra-file="$client_file" --connect-timeout=10 --batch --skip-column-names \

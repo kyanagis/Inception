@@ -13,10 +13,13 @@ secret() {
 [ "${1:-}" = mariadbd ] || exec "$@"
 : "${MYSQL_DATABASE:?MYSQL_DATABASE required}"
 : "${MYSQL_USER:?MYSQL_USER required}"
-case "$MYSQL_DATABASE:$MYSQL_USER" in *[!a-zA-Z0-9_:]*|:*|*:) fail "Invalid database identifiers";; esac
+: "${MYSQL_BACKUP_USER:?MYSQL_BACKUP_USER required}"
+case "$MYSQL_DATABASE:$MYSQL_USER:$MYSQL_BACKUP_USER" in *[!a-zA-Z0-9_:]*|:*|*::*|*:) fail "Invalid database identifiers";; esac
 [ "$MYSQL_USER" != root ] || fail "Application database user must not be root"
+[ "$MYSQL_BACKUP_USER" != root ] && [ "$MYSQL_BACKUP_USER" != "$MYSQL_USER" ] || fail "Backup database user must be distinct"
 root_password=$(secret /run/secrets/db_root_password)
 app_password=$(secret /run/secrets/db_password)
+backup_password=$(secret /run/secrets/db_backup_password)
 base=/var/lib/mysql
 staging=$base/.inception-bootstrap
 data=$base/data
@@ -37,7 +40,9 @@ for directory in /run/mysqld "$base"; do
 done
 printf '[client]\nuser=root\npassword=%s\nprotocol=socket\nsocket=/run/mysqld/mysqld.sock\n' "$root_password" > /run/mysqld/root-client.cnf
 printf '[client]\nuser=%s\npassword=%s\nprotocol=socket\nsocket=/run/mysqld/mysqld.sock\ndatabase=%s\n' "$MYSQL_USER" "$app_password" "$MYSQL_DATABASE" > /run/mysqld/app-client.cnf
-printf '%s\n%s\n' "$MYSQL_DATABASE" "$MYSQL_USER" > /run/mysqld/expected-identity
+printf '[client]\nuser=%s\npassword=%s\nprotocol=socket\nsocket=/run/mysqld/mysqld.sock\ndatabase=%s\n' "$MYSQL_BACKUP_USER" "$backup_password" "$MYSQL_DATABASE" > /run/mysqld/backup-client.cnf
+printf '%s\n%s\n%s\n' "$MYSQL_DATABASE" "$MYSQL_USER" "$MYSQL_BACKUP_USER" > /run/mysqld/expected-identity
+printf '%s\n%s\n' "$MYSQL_DATABASE" "$MYSQL_USER" > /run/mysqld/legacy-identity
 recover_metadata_preparations "$base" .inception-prepare-db. .inception-identity /run/mysqld/expected-identity inception-bootstrap-v1
 bootstrap_pid=
 cleanup() {
@@ -46,7 +51,7 @@ cleanup() {
             mariadb-admin --protocol=socket --socket=/run/mysqld/mysqld.sock --user=root shutdown >/dev/null 2>&1 || true
         wait "$bootstrap_pid" 2>/dev/null || true
     fi
-    rm -f /run/mysqld/root-client.cnf /run/mysqld/app-client.cnf /run/mysqld/expected-identity
+    rm -f /run/mysqld/root-client.cnf /run/mysqld/app-client.cnf /run/mysqld/backup-client.cnf /run/mysqld/expected-identity /run/mysqld/legacy-identity
 }
 trap cleanup EXIT
 trap 'exit 143' TERM
@@ -79,6 +84,7 @@ start_private() {
 verify_accounts() {
     mariadb --defaults-file=/run/mysqld/root-client.cnf --batch --skip-column-names -e 'SELECT 1' >/dev/null 2>&1 || fail "Root database secret does not match existing data"
     mariadb --defaults-file=/run/mysqld/app-client.cnf --batch --skip-column-names -e 'SELECT 1' >/dev/null 2>&1 || fail "Application database secret does not match existing data"
+    mariadb --defaults-file=/run/mysqld/backup-client.cnf --batch --skip-column-names -e 'SELECT 1' >/dev/null 2>&1 || fail "Backup database secret does not match existing data"
 }
 stop_private() {
     mariadb-admin --defaults-file=/run/mysqld/root-client.cnf shutdown >/dev/null 2>&1 || fail "Private database shutdown failed"
@@ -87,8 +93,24 @@ stop_private() {
 }
 if [ -e "$data" ]; then
     [ -d "$data" ] && [ -f "$data/.inception-complete" ] || fail "Unrecognized existing database; preserving data"
-    cmp -s /run/mysqld/expected-identity "$data/.inception-identity" || fail "Database identifiers changed; restore original configuration"
     [ ! -e "$staging" ] || fail "Unexpected bootstrap directory alongside committed database"
+    if cmp -s /run/mysqld/legacy-identity "$data/.inception-identity"; then
+        start_private "$data"
+        mariadb --defaults-file=/run/mysqld/root-client.cnf >/dev/null 2>&1 <<SQL
+CREATE USER IF NOT EXISTS '${MYSQL_BACKUP_USER}'@'%' IDENTIFIED BY '${backup_password}';
+ALTER USER '${MYSQL_BACKUP_USER}'@'%' IDENTIFIED BY '${backup_password}';
+GRANT SELECT, SHOW VIEW, TRIGGER, EVENT ON \`${MYSQL_DATABASE}\`.* TO '${MYSQL_BACKUP_USER}'@'%';
+FLUSH PRIVILEGES;
+SQL
+        verify_accounts
+        stop_private
+        cp /run/mysqld/expected-identity "$data/.inception-identity.tmp"
+        chown mysql:mysql "$data/.inception-identity.tmp"
+        chmod 0600 "$data/.inception-identity.tmp"
+        mv -T "$data/.inception-identity.tmp" "$data/.inception-identity"
+    else
+        cmp -s /run/mysqld/expected-identity "$data/.inception-identity" || fail "Database identifiers changed; restore original configuration"
+    fi
     start_private "$data"
     verify_accounts
     stop_private
@@ -113,6 +135,8 @@ else
 CREATE DATABASE \`${MYSQL_DATABASE}\` CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci;
 CREATE USER '${MYSQL_USER}'@'%' IDENTIFIED BY '${app_password}';
 GRANT ALL PRIVILEGES ON \`${MYSQL_DATABASE}\`.* TO '${MYSQL_USER}'@'%';
+CREATE USER '${MYSQL_BACKUP_USER}'@'%' IDENTIFIED BY '${backup_password}';
+GRANT SELECT, SHOW VIEW, TRIGGER, EVENT ON \`${MYSQL_DATABASE}\`.* TO '${MYSQL_BACKUP_USER}'@'%';
 ALTER USER 'root'@'localhost' IDENTIFIED BY '${root_password}';
 DELETE FROM mysql.global_priv WHERE User = '' OR (User = 'root' AND Host <> 'localhost');
 FLUSH PRIVILEGES;
@@ -130,5 +154,5 @@ SQL
 fi
 cleanup
 trap - EXIT HUP INT TERM
-unset root_password app_password value
+unset root_password app_password backup_password value
 exec gosu mysql "$@" --console --datadir="$data"

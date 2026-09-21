@@ -200,11 +200,11 @@ def prune(directory, partial, days=1, current=None):
 
 
 def client_options(path):
-    raw = Path("/run/secrets/db_password").read_text()
+    raw = Path("/run/secrets/db_backup_password").read_text()
     password = raw.removesuffix("\n")
     if not password or any(character in password for character in "\n\r\x00"):
         raise ValueError("invalid database secret")
-    user = os.environ["MYSQL_USER"]
+    user = os.environ["MYSQL_BACKUP_USER"]
     if not re.fullmatch(r"[A-Za-z0-9_]+", user):
         raise ValueError("invalid database user")
     password = password.replace("\\", "\\\\").replace('"', '\\"')
