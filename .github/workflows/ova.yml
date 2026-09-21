@@ -14,7 +14,21 @@ permissions:
   contents: read
 
 jobs:
+  check:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 120
+    steps:
+      - name: Checkout Inception
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - name: Install Nix
+        uses: DeterminateSystems/determinate-nix-action@527f17dd63d2d60d3e5552934bc84b9a33a14d11 # v3.22.2
+      - name: Run NixOS integration tests
+        run: nix flake check path:. -L --show-trace
+
   ova:
+    needs: check
     runs-on: ubuntu-24.04
     timeout-minutes: 240
 
@@ -39,16 +53,53 @@ jobs:
           test -n "$ova"
           echo "path=$ova" >> "$GITHUB_OUTPUT"
 
+      - name: Validate OVA manifest and VirtualBox import
+        shell: bash
+        env:
+          NIXPKGS_ALLOW_UNFREE: "1"
+        run: |
+          set -euo pipefail
+          inspect="$RUNNER_TEMP/ova-inspect"
+          mkdir -p "$inspect"
+          tar -xf "${{ steps.ova.outputs.path }}" -C "$inspect"
+          manifest="$(find "$inspect" -maxdepth 1 -type f -name '*.mf' -print -quit)"
+          test -n "$manifest"
+          while IFS= read -r line; do
+            file="${line#*(}"
+            file="${file%%)*}"
+            expected="${line##*= }"
+            actual="$(sha256sum "$inspect/$file" | awk '{print $1}')"
+            test "${actual,,}" = "${expected,,}"
+          done < "$manifest"
+          nix build --impure nixpkgs#virtualbox -o result-virtualbox
+          result-virtualbox/bin/VBoxManage import "${{ steps.ova.outputs.path }}" --dry-run
+
       - name: Split and verify OVA
         shell: bash
         run: |
           set -euo pipefail
-          split -b 1900M "${{ steps.ova.outputs.path }}" inception.ova.part-
+          split -b 1900M -d -a 2 "${{ steps.ova.outputs.path }}" inception.ova.part-
+          sha256sum inception.ova.part-* > SHA256SUMS
           sha256sum "${{ steps.ova.outputs.path }}" \
-            | awk '{print $1 "  inception.ova"}' > inception.ova.sha256
-          expected="$(awk '{print $1}' inception.ova.sha256)"
+            | awk '{print $1 "  inception.ova"}' >> SHA256SUMS
+          expected="$(awk '$2 == "inception.ova" {print $1}' SHA256SUMS)"
           actual="$(cat inception.ova.part-* | sha256sum | awk '{print $1}')"
           test "$actual" = "$expected"
+
+      - name: Record build provenance
+        shell: bash
+        run: |
+          set -euo pipefail
+          submit_commit="$(sed -n 's/^Submit commit: //p' nix/config/RELEASE-METADATA.txt)"
+          test -n "$submit_commit"
+          remote_submit="$(git ls-remote https://github.com/kyanagis/Inception.git refs/heads/submit | awk '{print $1}')"
+          test "$remote_submit" = "$submit_commit"
+          {
+            echo "OVA source commit: $GITHUB_SHA"
+            echo "Submit commit: $submit_commit"
+            echo "Flake lock SHA-256: $(sha256sum flake.lock | awk '{print $1}')"
+            echo "Runner OS: $(. /etc/os-release && echo "$PRETTY_NAME")"
+          } > BUILD-PROVENANCE.txt
 
       - name: Upload OVA artifact
         uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
@@ -56,7 +107,8 @@ jobs:
           name: inception-ova
           path: |
             inception.ova.part-*
-            inception.ova.sha256
+            SHA256SUMS
+            BUILD-PROVENANCE.txt
           if-no-files-found: error
           retention-days: 14
 
@@ -81,10 +133,24 @@ jobs:
           GH_TOKEN: ${{ github.token }}
         run: |
           set -euo pipefail
-          assets=(release-assets/inception.ova.sha256 release-assets/inception.ova.part-*)
+          assets=(release-assets/SHA256SUMS release-assets/BUILD-PROVENANCE.txt release-assets/inception.ova.part-*)
           if gh release view "$GITHUB_REF_NAME" >/dev/null 2>&1; then
-            gh release upload "$GITHUB_REF_NAME" "${assets[@]}" --clobber
-          else
-            gh release create "$GITHUB_REF_NAME" "${assets[@]}" \
-              --title "$GITHUB_REF_NAME" --generate-notes
+            echo "Release $GITHUB_REF_NAME already exists; refusing to overwrite it" >&2
+            exit 1
           fi
+          cat > release-notes.md <<EOF
+          Reproducible NixOS VirtualBox appliance for the Inception project.
+
+          $(cat release-assets/BUILD-PROVENANCE.txt)
+
+          Requirements: VirtualBox 7.x, x86_64 CPU, 4 GiB RAM, and at least 35 GiB free disk space.
+
+          Join the parts and verify the combined image:
+
+              cat inception.ova.part-* > inception.ova
+              sha256sum --check --ignore-missing SHA256SUMS
+
+          The appliance does not contain the assessed project source. Follow the guides on its Desktop and clone the exact submit branch commit recorded above.
+          EOF
+          gh release create "$GITHUB_REF_NAME" "${assets[@]}" \
+            --title "$GITHUB_REF_NAME" --notes-file release-notes.md --verify-tag
