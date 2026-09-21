@@ -2,160 +2,286 @@
 
 ## 1. 設計目標
 
-本構成は、要件を再現可能かつ安全側に満たすことを目的とします。必須経路は `client -> NGINX:443 -> WordPress/PHP-FPM:9000 -> MariaDB:3306` です。MariaDBとWordPressはホストへ公開しません。
+mandatoryのデータ経路は次です。
 
-## 2. 前提条件
+    client -> NGINX:443 -> WordPress/PHP-FPM:9000 -> MariaDB:3306
 
-- systemdを使用する専用Debian VM
-- ローカルrootful Docker Engine 27.0.3以上
+MariaDBとWordPressはhostへ公開しません。bonusのRedisもbackend network内だけです。Adminerとstatic siteはloopbackだけ、FTPSのみ指定portを公開します。
+
+この実装では「要件に見える」ことと「実行時に成立する」ことを分離し、静的検査、起動後のsmoke test、bonus integration test、仮説駆動auditの4層で確認します。
+
+## 2. host mode
+
+### 公開universal OVA
+
+OVAはNixOS上にDocker、評価用CLI、network/debug tool、開発tool、inception-setup、inception-evaluate、inception-auditを持ちます。
+
+OVAでは make host-setup を実行しません。
+
+    inception-setup YOUR_LOGIN
+    inception-evaluate --prepare
+
+inception-setup は /home/inception/data を /home/YOUR_LOGIN/data へ安全に切替え、Docker data-rootのrealpathが /home/YOUR_LOGIN/data/docker になることを確認します。
+
+domainはNixOSのnss-myhostnameでlocal addressへ解決されます。このためsubmitのpreflightは127.0.0.1固定ではなく、解決されたIPv4がVM自身のinterface/loopback address集合に含まれるかを検証します。
+
+### 汎用Debian VM
+
+    make configure LOGIN=YOUR_LOGIN
+    make host-setup LOGIN=YOUR_LOGIN
+
+host-setupは専用VM、rootful Docker、空のDocker stateを要求し、data-rootと/etc/hostsをtransaction的に変更します。OVAを検出すると処理を拒否します。
+
+## 3. OVAとsubmitのforward-compatible contract
+
+OVAはsubmit sourceを内包しません。特定commitもrelease metadataへ固定しません。
+
+inception-evaluateは次を行います。
+
+1. INCEPTION_LOGINの設定を検証する。
+2. /home/inception/Inception-submit が無ければremote submitをcloneする。
+3. 既存checkoutならtracked changeがないことを確認する。
+4. origin/submitをfetchしてfast-forwardする。
+5. .inception/host-toolsを検証する。
+6. OVAに不足commandがあれば対応するnixpkgs packageだけをephemeral shellへ追加する。
+7. make configure LOGIN=...、make doctor、make checkを実行する。
+8. 指定optionに応じてmake up/test/bonus/bonus-test/auditを実行する。
+
+host-toolsはshellとしてsourceしません。各行をcommand名とnixpkgs attributeの2つのidentifierとしてparseし、許可文字以外を拒否します。これによりsubmit更新が任意host command injectionになる経路を作りません。
+
+このcontractで吸収できる変更:
+- Dockerfile、Compose、NGINX、PHP、MariaDB、WordPress設定
+- shell/Python検証script
+- 通常のuserspace CLI依存
+- mandatory/bonus test拡張
+- documentation
+- image/application version更新
+
+OVA再生成が必要になり得る変更:
+- guest kernel feature自体の変更
+- x86_64以外へのarchitecture変更
+- VirtualBox virtual hardware requirement変更
+- system disk capacityそのものを超える要求
+- host daemon/kernel moduleをbuild時から組み込む要求
+
+## 4. 前提command
+
+submit単体の最低contract:
+- Docker Engine 27.0.3以上
 - Docker Compose 2.38.2以上
-- `jq`、OpenSSL、`flock`、`realpath`、`stat`、`timeout`、GNU coreutils
-- `/home/<login>` が存在し、sudoまたはrootを利用可能
-- Docker daemonに既存コンテナ、イメージ、volume、カスタムnetworkがないこと
+- make
+- jq
+- python3
+- ip
+- getent
+- realpath
+- stat
+- awk
+- grep
+- sort
+- OpenSSL
+- curl
 
-バージョン下限はComposeの `--wait`、JSON出力等、本成果物が検証したCLI挙動を固定するためです。要件を緩和する場合は、対象バージョンで全テストを再実施してください。
+公開OVAはこれらをbuilt-inで提供します。追加commandは .inception/host-tools で宣言できます。
 
-## 3. ゼロからの構築
+## 5. image supply chain
 
-```sh
-make configure LOGIN=kyanagis
-make host-setup LOGIN=kyanagis
-make check
-make doctor
-make build
-make up
-make test
-```
+全service Dockerfileはdigest固定Debian 12 slimを基底とします。WordPress、WP-CLI、Redis plugin、Adminerなど外部配布物にはversionとSHA-256を固定します。
 
-`configure` は `srcs/.env` のドメイン、保存先、メールアドレスを更新します。`host-setup` は次をトランザクション的に実施します。
+更新時:
+1. official upstreamを確認する。
+2. versionを固定する。
+3. artifact hashを独立に検証する。
+4. clean buildする。
+5. mandatory/bonus testを実行する。
+6. rollback対象versionを残す。
 
-1. 専用VM、rootful daemon、空のDocker状態を検査する。
-2. `/etc/docker/daemon.json` のdata-rootを `/home/<login>/data/docker` に設定する。
-3. 構成済みのドメインを127.0.0.1へ解決する。
-4. Dockerを再起動し、失敗時は元の設定へ戻す。
+latest tagは使いません。
 
-既存Docker資産を自動移行しないのは、暗黙のデータ消失や別プロジェクトへの影響を避けるためです。
+## 6. container boundary
 
-## 4. 設定ファイルと秘密情報
+共通防御:
+- read_only root filesystem
+- no-new-privileges
+- cap_drop ALLを基準に必要capabilityだけ追加
+- bounded tmpfs
+- memory/pids/cpu limits
+- foreground daemon
+- restart unless-stopped
+- bounded json-file logs
+- explicit bridge networks
+- health checks
 
-`srcs/.env` には公開可能な構成値だけを置きます。パスワード、APIキー、秘密鍵を追加してはいけません。初回 `setup` は暗号学的乱数で64桁hexの秘密値を生成し、自己署名ECDSA証明書を作成します。
+RedisだけはCompose file-backed secretの0600 ownership問題を安全に処理するためentrypointをrootで開始します。root phaseではsecretを読み、/run/redis/users.aclをtmpfsへ生成し、CHOWN/SETUID/SETGIDの最小capabilityだけを使った後、gosu redisでdaemonを非root起動します。固定UID/GIDは使用しません。
 
-秘密情報を変更すると永続データ内の認証情報と不一致になります。既存環境のローテーションは単なるファイル置換ではなく、サービス内の認証情報更新、停止、secret更新、再起動、疎通確認を一つの変更手順として実施してください。現在の自動化は意図的に不一致を検出して停止し、暗黙のローテーションは行いません。
+Redis ACL:
+- default user off
+- random 64-hex password
+- WordPress userのみ
+- read/write/connection/scripting category
+- flush/config/acl/shutdown/module/replication/persistence control commandを明示deny
 
-## 5. イメージとサプライチェーン
+## 7. WordPress boundary
 
-各Dockerfileはdigest固定したDebian 12 slimを基底とします。WordPress、WP-CLI、Redis plugin、AdminerはバージョンとSHA-256を固定します。更新時は必ず公式配布元から別ディレクトリへ取得し、ハッシュ、アーカイブ内容、リリース情報を確認してからComposeの値を変更します。
+WordPress設定は次を強制します。
 
-2026-09-21時点のWordPressは7.1.1を固定しています。自動更新は再現性を壊すため無効です。セキュリティ更新は、変更要求、ハッシュ更新、クリーンビルド、移行試験、ロールバック確認を伴う管理作業として行います。
+- FORCE_SSL_ADMIN
+- DISALLOW_FILE_EDIT
+- DISALLOW_FILE_MODS
+- WP core auto update無効
+- generated random salts
+- DB password/Redis passwordはruntime fileから読む
+- admin名にadmin文字列を許可しない
+- adminと一般userを別accountにする
+- core fileをroot:www-dataで非書込み
+- uploadsだけwww-dataへ書込み許可
 
-## 6. コンテナ防御
+NGINXはuploads内PHP実行、dotfile、wp-config.php、readme.html、license.txtへのdirect accessを拒否します。xmlrpc.phpも拒否します。
 
-- root filesystemはread-only
-- 必要な実行時書込みだけnamed volumeまたはtmpfs
-- 全capabilityを削除後、必要最小限だけ追加
-- `no-new-privileges`
-- foreground daemonとinit
-- healthcheckと起動依存
-- 30秒の停止猶予
-- json-fileログを10 MiB×3へ制限
-- frontend/backendはinternal bridge
-- mandatoryのホスト公開はNGINX 443だけ
+## 8. MariaDB state machine
 
-これらは多層防御であり、脆弱性がないことを意味しません。
+MariaDB entrypointは単純な「directoryが空ならinit」ではありません。
 
-## 7. 永続化
+- staging directory
+- identity marker
+- completion marker
+- application/root/backup credential照合
+- interrupted bootstrapのrecovery
+- unknown dataを自動削除しない
+- backup userをapplication userと分離
 
-必須named volumeは次の2つです。
+認証不一致や未知のdataを検出した場合、暗黙のresetより停止を選びます。
 
-- `inception_mariadb_data` -> `/var/lib/mysql`
-- `inception_wordpress_data` -> `/var/www`
+## 9. 永続化
 
-ボーナスは `inception_backup_data` を追加します。bind mount禁止条件を守るため、Compose volumeにbind driver optionは設定しません。代わりに専用daemonのdata-root全体を `/home/<login>/data/docker` に置きます。
+mandatory:
+- inception_mariadb_data
+- inception_wordpress_data
 
-確認方法：
+bonus:
+- inception_backup_data
 
-```sh
-docker volume inspect inception_mariadb_data inception_wordpress_data
-docker info --format '{{.DockerRootDir}}'
-```
+volume driverはlocalでdriver optionを持ちません。bind-backed volumeにはしません。
 
-volume内部をホストから直接変更してはいけません。所有者、管理メタデータ、DB整合性が壊れるためです。
+専用Docker daemonのdata-root自体を /home/<login>/data/docker へ置くことで、named volume実体がsubject要求のlearner data path配下へ置かれます。
 
-## 8. Makeターゲット
+OVAでは /home/inception/data が /home/<login>/data への管理symlinkになり、docker infoが論理pathを表示してもrealpathでsubject pathへ到達します。
 
-| ターゲット | 動作 |
-|---|---|
-| `check` | daemon不要の静的検証 |
-| `doctor` | daemon、名前解決、data-root、既存volumeを検証 |
-| `config` | bonusを含むCompose構文検証 |
-| `build` | mandatory 3イメージだけを構築 |
-| `bonus-build` | 全イメージを構築 |
-| `up` / `bonus` | mandatory / 全サービスを起動 |
-| `test` | 静的検証と稼働中mandatoryの統合試験 |
-| `down` | コンテナとnetworkを削除、volume保持 |
-| `fclean` | volumeとプロジェクトイメージを削除 |
+## 10. verification layers
 
-`fclean` は破壊的です。自動ジョブや通常運用中に無条件で呼び出してはいけません。
+### static
 
-## 9. 検証プロトコル
+    make check
 
-リリース候補ごとに専用VMの空状態から次を記録します。
+確認内容:
+- service数とlocal build
+- image naming
+- read-only/no-new-privileges等の宣言
+- mandatory公開port
+- secret assignment
+- pinned base image
+- prohibited keepalive loop
+- TLS version
+- NGINX defense
+- WordPress immutable settings
+- Redis privilege drop/ACL
+- shell/Python syntax
+- repository credential material
 
-1. `make check`
-2. `make doctor`
-3. `make build --always-make` 相当のクリーンビルド
-4. `make up`
-5. `make test`
-6. 管理者と一般ユーザーのログイン確認
-7. 投稿と添付ファイルを作成
-8. `make restart` 後も内容が保持されることを確認
-9. `make down`、`make up` 後も保持されることを確認
-10. TLS 1.0/1.1拒否、TLS 1.2/1.3許可を確認
-11. ホスト公開ポートを確認
-12. bonusを別途構築し、各health、FTPS、Redis、Adminer、静的サイト、backupを確認
-13. 隔離環境で復元演習
+### host
 
-コマンド終了コード、イメージdigest、構成ファイルhash、実施者、日時、VM情報を試験記録へ残します。テスト失敗を再実行だけで消し込まず、原因と是正内容を記録してください。
+    make doctor
 
-## 10. バックアップと復元
+確認内容:
+- rootful local Docker
+- version
+- data-root
+- volume ownership/driver/path
+- domainがVM自身のIPv4へ解決されること
 
-バックアップはMariaDBのsingle-transaction dumpとWordPressファイルarchive、manifest、SHA-256一覧を生成します。
+### mandatory runtime
 
-```sh
-make bonus
-make backup-now
-make backup-list
-make backup-verify BACKUP=YYYYMMDDTHHMMSSZ-XXXXXXXXXX
-```
+    make up
+    make test
 
-DB dumpとファイルarchiveは単一の原子的スナップショットではありません。整合性が重要な復元点を採取するときは、投稿、アップロード、FTPS等の書込みを停止した保守時間帯に実行してください。
+確認内容:
+- exactly mandatory service set
+- health
+- only NGINX 443 exposure
+- HTTPS
+- unknown Host rejection
+- xmlrpc denial
+- TLS 1.0/1.1 rejection, 1.2/1.3 acceptance
+- WordPress users
+- core checksums
+- file ownership
+- site/home URL
+- MariaDB authentication
 
-復元は破壊的になり得るため自動ターゲットを設けていません。次の承認済みrunbookとして隔離環境で行います。
+### bonus runtime
 
-1. 対象backupを `backup-verify` で検証する。
-2. manifestのdomain、DB名、ユーザー、WordPress版、MariaDB major/minorを照合する。
-3. 元環境と一致するsecretを安全に用意する。
-4. 新規の隔離VMで同一構成をbootstrapする。
-5. WordPress、FTP、backup等、DB／ファイルwriterを停止する。
-6. SQLを対象DBへimportし、WordPress `html` をarchiveから復元する。
-7. 所有者を `www-data:www-data` に戻し、管理用 `.inception-state` を保持する。
-8. 起動後にアカウント、URL、投稿、添付ファイルhash、Redis無効時／有効時を検証する。
-9. 承認後にのみ本番切替を行う。
+    make bonus
+    make bonus-test
 
-本番データを直接上書きする前に、必ず復元先を別環境として検証してください。
+確認内容:
+- full 8 service set
+- health
+- Redis private/authenticated/object-cache path
+- Adminer/static loopback-only
+- FTPS certificate verification
+- real backup generation and manifest verification
 
-## 11. 障害解析と変更管理
+### threat-hypothesis audit
 
-原因不明のvolume削除や初期化は行いません。entrypointはidentity、secret、管理markerが一致しない永続データを検出すると、安全側に停止します。これは障害ではなくデータ保護動作です。
+    make audit
 
-変更時は少なくとも次をレビューします。
+auditは「安全」という結論を先に置かず、攻撃仮説をID付きで検証します。現在の主な仮説:
 
-- 課題要件とのトレーサビリティ
-- 公開ポートとnetwork到達性
-- secret露出
-- 永続データの前方・後方互換性
-- rollback可能性
-- ベースイメージと配布物の真正性
-- healthcheckが実際の準備完了を表すか
-- ログに秘密情報・機微情報が出ないか
-- backupと復元の実証結果
+- H01 static policyを迂回する構成が入った
+- H02 privileged/host namespace/writable rootfsが入った
+- H03 DB/WordPress/Redisがhostへ公開された
+- H04 secret/private keyがGit追跡された
+- H05 credentialがenvironmentへ入った
+- H06 runtime configがdeclared hardeningと異なる
+- H07 runtime backend portが公開された
+
+仮説追加時は「攻撃経路 -> 観測点 -> 再現command -> expected failure/containment」を先に書き、checkを後から合わせます。
+
+## 11. backup/recovery
+
+backupはMariaDB single-transaction dump、WordPress file archive、manifest、SHA-256を生成します。
+
+    make bonus
+    make backup-now
+    make backup-list
+    make backup-verify BACKUP=<name>
+
+DB dumpとfilesystem archiveは単一transactionではありません。厳密なrestore pointではwriterを停止したmaintenance windowを使います。
+
+restoreは隔離VMで:
+1. manifest/hash verify
+2. identity/version照合
+3. compatible secretsを安全に用意
+4. clean bootstrap
+5. writer停止
+6. SQL import
+7. WordPress archive復元
+8. ownership修復
+9. account/URL/post/upload/Redis検証
+10. 承認後のみ切替
+
+## 12. CI release gate
+
+OVA CIは次を別々に通す必要があります。
+
+1. Nix evaluation/build test
+2. NixOS boot test
+3. OVA baseline command contract
+4. current submit checkoutとのdoctor/check contract test
+5. current submit Docker build/up/test
+6. current submit bonus/bonus-test
+7. OVA manifest digest validation
+8. VirtualBox dry-run import
+9. split artifact recombination hash validation
+
+submitが変わってもOVA image sourceが変わらない限り、既存OVAは利用できます。CIはsubmit compatibilityを継続監視し、互換性が壊れた場合に「OVAを作り直す」のではなく、まずsubmit側contractまたはephemeral dependency宣言で解決できるかを判定します。
