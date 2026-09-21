@@ -60,10 +60,20 @@ TLSEngine on
 TLSRequired on
 TLSProtocol TLSv1.2 TLSv1.3
 TLSCipherSuite ECDHE-ECDSA-AES256-GCM-SHA384:ECDHE-ECDSA-AES128-GCM-SHA256
-TLSECCertificateFile /run/secrets/tls_certificate
-TLSECCertificateKeyFile /run/secrets/tls_private_key
+TLSECCertificateFile /run/secrets/ftps_certificate
+TLSECCertificateKeyFile /run/secrets/ftps_private_key
 TLSOptions NoSessionReuseRequired
 TLSLog /run/proftpd/proftpd-tls.log
+<Directory /srv/wordpress/html/*>
+  <Limit WRITE>
+    DenyAll
+  </Limit>
+</Directory>
+<Directory /srv/wordpress/html/wp-content/uploads/*>
+  <Limit WRITE>
+    AllowAll
+  </Limit>
+</Directory>
 EOF
 
 exec "$@"
