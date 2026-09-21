@@ -1,0 +1,11 @@
+secrets/*
+!secrets/.gitkeep
+*.key
+*.crt
+*.pem
+.DS_Store
+*~
+*.swp
+*.swo
+.idea/
+.vscode/

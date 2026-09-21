@@ -1,0 +1,4 @@
+**
+!Dockerfile
+!conf/lighttpd.conf
+!conf/session.ini

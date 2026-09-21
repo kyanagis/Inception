@@ -1,0 +1,9 @@
+**
+!Dockerfile
+!conf/php-fpm.conf
+!conf/php.ini
+!conf/www.conf
+!tools/check-account.php
+!tools/configure.php
+!tools/entrypoint.sh
+!tools/prepare-state.sh
