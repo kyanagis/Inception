@@ -3,7 +3,7 @@ COMPOSE := docker --host unix:///var/run/docker.sock compose --env-file srcs/.en
 export LOGIN
 .DEFAULT_GOAL := all
 .NOTPARALLEL:
-.PHONY: all host-setup configure preflight doctor setup config build bonus-build up bonus down stop start restart status logs check test backup-now backup-list backup-verify clean fclean re help
+.PHONY: all host-setup configure preflight doctor setup config build bonus-build up bonus down stop start restart status logs check audit test bonus-test backup-now backup-list backup-verify clean fclean re help
 
 all: up
 
@@ -92,6 +92,6 @@ help:
 	'  make' \
 	'' \
 	'Mandatory: build, up, test, stop, start, restart, status, logs, down' \
-	'Bonus: bonus-build, bonus, backup-now, backup-list, backup-verify BACKUP=<name>' \
-	'Validation: check (offline/static), doctor (host), config, test (running stack)' \
+	'Bonus: bonus-build, bonus, bonus-test, backup-now, backup-list, backup-verify BACKUP=<name>' \
+	'Validation: check (offline/static), audit (threat hypotheses), doctor (host), config, test / bonus-test' \
 	'Destructive: fclean deletes project containers, images, and named-volume data; re rebuilds from empty state.'
