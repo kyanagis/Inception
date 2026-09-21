@@ -61,9 +61,16 @@ logs: preflight
 check:
 	@./srcs/tools/check.sh
 
+audit:
+	@sh ./srcs/tools/security-audit.sh
+
 test: setup
 	@./srcs/tools/check.sh
 	@./srcs/tools/smoke-test.sh
+
+bonus-test: setup
+	@./srcs/tools/check.sh
+	@sh ./srcs/tools/bonus-smoke-test.sh
 
 backup-now: preflight
 	$(COMPOSE) --profile bonus exec -T backup /usr/local/bin/backup-now
@@ -86,12 +93,16 @@ re: fclean
 
 help:
 	@printf '%s\n' \
-	'First use in a dedicated Debian VM:' \
+	'Published OVA first use:' \
+	'  inception-setup login' \
+	'  inception-evaluate --prepare' \
+	'' \
+	'Generic dedicated Debian VM first use:' \
 	'  make configure LOGIN=login' \
 	'  make host-setup LOGIN=login' \
 	'  make' \
 	'' \
 	'Mandatory: build, up, test, stop, start, restart, status, logs, down' \
 	'Bonus: bonus-build, bonus, bonus-test, backup-now, backup-list, backup-verify BACKUP=<name>' \
-	'Validation: check (offline/static), audit (threat hypotheses), doctor (host), config, test / bonus-test' \
+	'Validation: check (static), audit (threat hypotheses), doctor (host), config, test / bonus-test' \
 	'Destructive: fclean deletes project containers, images, and named-volume data; re rebuilds from empty state.'
