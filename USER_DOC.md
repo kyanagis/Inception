@@ -2,7 +2,7 @@
 
 ## 1. 提供サービス
 
-通常の `make` では次の必須サービスだけを起動します。
+通常の make up では mandatory の3サービスだけを起動します。
 
 | サービス | 役割 | ホスト公開 |
 |---|---|---|
@@ -10,95 +10,189 @@
 | WordPress | CMSとPHP-FPM | なし |
 | MariaDB | WordPressデータベース | なし |
 
-`make bonus` はRedis、FTPS、静的サイト、Adminer、定期バックアップも起動します。ボーナス環境は追加ポートを使用するため、必要な場合だけ有効化してください。
+make bonus は Redis、明示FTPS、静的サイト、Adminer、定期バックアップも起動します。Adminerと静的サイトは127.0.0.1だけへbindし、Redisはホストへ公開しません。
 
-## 2. 初回起動
+## 2. 初回起動: 公開OVA
 
-専用Debian VMで、リポジトリのルートから実行します。`LOGIN` は対象環境のログイン名へ置き換えます。
+公開OVAでは Docker daemon、Docker data-root、42用データディレクトリの切替機構がOS側に組み込まれています。make host-setup は実行しないでください。
 
-```sh
-make configure LOGIN=kyanagis
-make host-setup LOGIN=kyanagis
-make check
-make
-make test
-```
+最初に42 loginを設定します。
 
-`host-setup` は管理者権限を要求し、Dockerの保存先と `/etc/hosts` を設定します。既存Docker資産があるホストでは安全のため停止します。共用ホストでは実行しないでください。
+    inception-setup YOUR_LOGIN
 
-## 3. 開始・停止・状態確認
+新しいTerminalを開いて、次を確認します。
 
-```sh
-make up       # 必須サービスを構築して起動
-make bonus    # ボーナスを含めて構築して起動
-make stop     # コンテナを停止（削除しない）
-make start    # 既存コンテナを開始
-make restart  # 再起動
-make down     # コンテナとネットワークを削除、データは保持
-make status   # 状態とhealthを表示
-make logs     # 直近100行からログを追跡、Ctrl-Cで終了
-make test     # 必須サービスの統合検証
-```
+    echo "$INCEPTION_LOGIN"
+    echo "$DOMAIN_NAME"
+    echo "$INCEPTION_DATA_DIR"
+    docker info --format '{{.DockerRootDir}}'
+    readlink -f /home/inception/data/docker
 
-正常時は `make status` で `mariadb`、`wordpress`、`nginx` が稼働し、healthが `healthy` になります。異常時は変更や削除を行う前に、時刻、実行コマンド、`make status`、必要範囲のログを記録してください。ログに秘密値を貼り付けないでください。
+YOUR_LOGIN=kyanagis の場合、期待される論理値は次です。
 
-## 4. Webサイトへのアクセス
+    INCEPTION_LOGIN=kyanagis
+    DOMAIN_NAME=kyanagis.42.fr
+    INCEPTION_DATA_DIR=/home/kyanagis/data
 
-- Webサイト: `srcs/.env` の `DOMAIN_NAME` に設定したHTTPS URL
-- 管理画面: 上記URLの `/wp-admin/`
+DockerRootDirは /home/inception/data/docker と表示される場合がありますが、/home/inception/data は /home/kyanagis/data へ向く管理symlinkです。realpath後の実体は /home/kyanagis/data/docker になります。
 
-証明書は初回セットアップ時にローカル生成されます。ブラウザ警告を無条件に無視せず、管理者が次のコマンドで確認した証明書と一致することを確認してください。
+推奨手順は次です。
 
-```sh
-openssl x509 -in secrets/tls_certificate.pem -noout -subject -issuer -dates -fingerprint -sha256
-```
+    inception-evaluate --prepare
 
-## 5. 認証情報の管理
+これは current submit branch を取得またはfast-forwardし、対象checkoutを構成し、doctor/checkを実行します。OVAは特定のsubmit commitへ固定されていません。
 
-認証情報はリポジトリ直下の `secrets/` に生成されます。
+手動で行う場合:
+
+    cd /home/inception
+    git clone --branch submit --single-branch       https://github.com/kyanagis/Inception.git Inception-submit
+    cd Inception-submit
+    make configure LOGIN="$INCEPTION_LOGIN"
+    make doctor
+    make check
+
+その後:
+
+    make up
+    make test
+
+## 3. 初回起動: 汎用Debian VM
+
+公開OVA以外の専用Debian VMでは次を使います。
+
+    make configure LOGIN=YOUR_LOGIN
+    make host-setup LOGIN=YOUR_LOGIN
+    make check
+    make doctor
+    make up
+    make test
+
+host-setup はroot権限でDocker daemonの保存先と /etc/hosts を変更します。共用ホストでは実行しないでください。既存コンテナ、イメージ、volume、custom networkがあるDocker daemonでは安全側に停止します。
+
+## 4. 開始・停止・状態確認
+
+    make up
+    make bonus
+    make stop
+    make start
+    make restart
+    make down
+    make status
+    make logs
+
+make up はmandatoryのみを起動し、bonus serviceが残っている場合は停止します。make bonus は全serviceを起動します。
+
+正常なmandatory環境では mariadb、wordpress、nginx がrunningかつhealthyです。異常時は削除や再初期化の前に、時刻、実行コマンド、make status、必要最小限のlogを記録してください。
+
+## 5. Webアクセス
+
+Web site:
+
+    https://YOUR_LOGIN.42.fr
+
+管理画面:
+
+    https://YOUR_LOGIN.42.fr/wp-admin/
+
+自己署名証明書を無条件に承認せず、fingerprintを確認してください。
+
+    openssl x509 -in secrets/tls_certificate.pem       -noout -subject -issuer -dates -fingerprint -sha256
+
+NGINXはTLS 1.2と1.3だけを受け付けます。port 80はmandatory entry pointではありません。
+
+## 6. 認証情報
+
+認証情報はリポジトリ直下のsecretsディレクトリへローカル生成されます。
 
 | ファイル | 用途 |
 |---|---|
-| `db_password.txt` | WordPress用DBユーザー |
-| `db_root_password.txt` | MariaDB root |
-| `wp_admin_password.txt` | WordPress管理者 |
-| `wp_user_password.txt` | WordPress一般ユーザー |
-| `ftp_password.txt` | FTPSユーザー |
-| `tls_private_key.pem` | TLS秘密鍵への管理リンク |
-| `tls_certificate.pem` | TLS証明書への管理リンク |
+| db_password.txt | WordPress用DBユーザー |
+| db_root_password.txt | MariaDB root |
+| db_backup_password.txt | backup専用DBユーザー |
+| wp_admin_password.txt | WordPress管理者 |
+| wp_user_password.txt | WordPress一般ユーザー |
+| redis_password.txt | Redis WordPress ACLユーザー |
+| ftp_password.txt | FTPSユーザー |
+| tls_private_key.pem | HTTPS秘密鍵への管理link |
+| tls_certificate.pem | HTTPS証明書への管理link |
+| ftps_private_key.pem | FTPS秘密鍵 |
+| ftps_certificate.pem | FTPS証明書 |
 
-`secrets/` はGit対象外です。秘密値をチャット、メール、課題提出物、ログへ転載しないでください。権限はディレクトリ0700、パスワードと秘密鍵0600を維持します。秘密値を失った状態で既存ボリュームを起動すると、安全のため認証不一致で停止します。
+secretsはGit対象外です。passwordやprivate keyをチャット、issue、log、shell history、screenshotへ転記しないでください。
 
-## 6. データ保持と削除
+既存volumeがある状態でsecretだけを消して再生成すると、保存済み認証情報と一致しなくなるためentrypointは安全側に停止します。
 
-WordPressとMariaDBはDocker named volumeへ保存されます。専用Docker daemonの実データは `/home/kyanagis/data/docker/volumes/` 以下です。通常はこの内部構造を直接編集しないでください。
+## 7. 検証
 
-`make stop`、`make down`、VM再起動ではデータは残ります。次は不可逆な削除操作です。
+mandatory:
 
-```sh
-make fclean
-```
+    make check
+    make doctor
+    make up
+    make test
+    make audit
 
-実行前に対象プロジェクト、バックアップ、復旧可能性を確認してください。`fclean` はプロジェクトのnamed volumeとイメージを削除します。
+make audit は「安全そう」という主張ではなく、想定攻撃経路を仮説として扱います。privileged/host namespace、backend port公開、credential環境変数、tracked secret、read-only rootfs、no-new-privileges等を静的・実行時に確認します。
 
-## 7. バックアップ
+bonus:
 
-バックアップサービスはボーナス環境でのみ使用できます。
+    make bonus
+    make bonus-test
 
-```sh
-make bonus
-make backup-now
-make backup-list
-make backup-verify BACKUP=YYYYMMDDTHHMMSSZ-XXXXXXXXXX
-```
+bonus-test は次を実証します。
 
-バックアップが作成された事実だけでは復旧可能性を保証しません。定期的に隔離環境で復元演習を行い、Web表示、管理者ログイン、一般ユーザー、投稿、添付ファイル、DB整合性を確認してください。復元の詳細は `DEV_DOC.md` を参照してください。
+1. 8 serviceが期待どおり稼働している。
+2. healthcheck対象がhealthyである。
+3. Redisがhostへ公開されず認証付きで応答する。
+4. WordPress Redis object cacheが利用可能である。
+5. Adminerは127.0.0.1:8080だけへ公開される。
+6. static siteは127.0.0.1:8081だけへ公開される。
+7. explicit FTPSでTLS証明書検証が成立する。
+8. 実backupを作成しmanifest検証が成功する。
 
-## 8. 障害時の基本原則
+## 8. 永続化
+
+mandatoryのnamed volume:
+
+    inception_mariadb_data
+    inception_wordpress_data
+
+bonus:
+
+    inception_backup_data
+
+公開OVAではDocker data-rootの実体が /home/YOUR_LOGIN/data/docker へ到達するようOS側で構成されます。volume内部をhostから直接編集しないでください。
+
+make stop、make down、VM rebootではvolume dataは残ります。
+
+## 9. バックアップ
+
+    make bonus
+    make backup-now
+    make backup-list
+    make backup-verify BACKUP=YYYYMMDDTHHMMSSZ-XXXXXXXXXX
+
+backup作成成功だけではrestore可能性を保証しません。定期的に別の隔離環境へ復元し、投稿、user、添付ファイル、URL、DB整合性を確認してください。
+
+## 10. 破壊的操作
+
+    make fclean
+
+project container、project image、named volume dataを削除します。実行前にbackupが存在するだけでなく、検証済みであることを確認してください。
+
+## 11. OVAをsubmit変更から独立させる仕組み
+
+OVAには評価対象sourceを焼き込みません。inception-evaluate は毎回remote submitを参照します。
+
+submit branchの .inception/host-tools は command と nixpkgs package の安全な対応表です。将来、通常のuserspace依存が増えた場合はsubmit側だけでこのcontractを更新でき、OVA側にcommandがなければ evaluator が一時的なNix shellで補います。
+
+この仕組みで、Dockerfile、Compose、shell、WordPress設定、テスト、通常のCLI依存追加などのsubmit変更はOVA再生成理由になりません。カーネル機能、CPU architecture、VirtualBox hardware、root filesystem容量そのものを変更する要求は例外です。
+
+## 12. 障害時の基本原則
 
 1. 症状、時刻、直前変更、影響範囲を記録する。
-2. `make status` と必要最小限のログを保存する。
-3. 認証情報や機微情報がログに含まれないことを確認する。
-4. 原因不明のまま `fclean`、ボリューム削除、DB直接編集を行わない。
-5. バックアップの検証後、隔離環境で復旧手順をリハーサルする。
-6. 影響範囲が不明な場合は、技術判断だけで継続せず、定められたインシデント管理責任者へ連絡する。
+2. make status と必要最小限のlogを保存する。
+3. secretやdatabase内容がlogに含まれないことを確認する。
+4. 原因不明のままfcleanやvolume削除をしない。
+5. make auditで境界条件を再確認する。
+6. backupを隔離環境でverifyしてから復旧する。
