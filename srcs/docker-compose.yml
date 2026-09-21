@@ -22,17 +22,22 @@ services:
     environment:
       MYSQL_DATABASE: ${MYSQL_DATABASE}
       MYSQL_USER: ${MYSQL_USER}
+      MYSQL_BACKUP_USER: ${MYSQL_BACKUP_USER}
     secrets:
       - db_password
       - db_root_password
+      - db_backup_password
     volumes:
       - mariadb_data:/var/lib/mysql
     networks:
       - backend
     read_only: true
     tmpfs:
-      - /run/mysqld:mode=0755
-      - /tmp:mode=1777
+      - /run/mysqld:mode=0755,size=16m,nosuid,nodev,noexec
+      - /tmp:mode=1777,size=128m,nosuid,nodev,noexec
+    mem_limit: 768m
+    cpus: 1.0
+    pids_limit: 256
     cap_drop:
       - ALL
     cap_add:
@@ -74,6 +79,7 @@ services:
       - db_password
       - wp_admin_password
       - wp_user_password
+      - redis_password
     volumes:
       - wordpress_data:/var/www
     networks:
@@ -84,8 +90,11 @@ services:
         condition: service_healthy
     read_only: true
     tmpfs:
-      - /run/php:mode=0755
-      - /tmp:mode=1777
+      - /run/php:mode=0755,size=16m,nosuid,nodev,noexec
+      - /tmp:mode=1777,size=128m,nosuid,nodev,noexec
+    mem_limit: 768m
+    cpus: 1.5
+    pids_limit: 256
     cap_drop:
       - ALL
     cap_add:
@@ -94,7 +103,7 @@ services:
       - SETGID
       - SETUID
     healthcheck:
-      test: ["CMD", "nc", "-z", "127.0.0.1", "9000"]
+      test: ["CMD", "/usr/local/bin/wordpress-healthcheck"]
       interval: 5s
       timeout: 3s
       retries: 20
@@ -123,10 +132,13 @@ services:
         condition: service_healthy
     read_only: true
     tmpfs:
-      - /run:mode=0755
-      - /var/cache/nginx:mode=0755
-      - /var/lib/nginx:mode=0755
-      - /tmp:mode=1777
+      - /run:mode=0755,size=16m,nosuid,nodev,noexec
+      - /var/cache/nginx:mode=0755,size=64m,nosuid,nodev,noexec
+      - /var/lib/nginx:mode=0755,size=16m,nosuid,nodev,noexec
+      - /tmp:mode=1777,size=64m,nosuid,nodev,noexec
+    mem_limit: 256m
+    cpus: 0.5
+    pids_limit: 128
     cap_drop:
       - ALL
     cap_add:
@@ -136,7 +148,7 @@ services:
       - SETGID
       - SETUID
     healthcheck:
-      test: ["CMD", "curl", "--fail", "--insecure", "--silent", "https://127.0.0.1/healthz"]
+      test: ["CMD-SHELL", "curl --fail --insecure --silent --resolve $${DOMAIN_NAME}:443:127.0.0.1 https://$${DOMAIN_NAME}/ >/dev/null"]
       interval: 10s
       timeout: 3s
       retries: 10
@@ -148,15 +160,20 @@ services:
     build:
       context: requirements/bonus/redis
       dockerfile: Dockerfile
+    secrets:
+      - redis_password
     networks:
       - backend
     read_only: true
     tmpfs:
-      - /run/redis:mode=0755,uid=101,gid=101
-      - /tmp:mode=1777
+      - /run/redis:mode=0700,uid=101,gid=101,size=16m,nosuid,nodev,noexec
+      - /tmp:mode=1777,size=64m,nosuid,nodev,noexec
+    mem_limit: 256m
+    cpus: 0.5
+    pids_limit: 128
     cap_drop: ["ALL"]
     healthcheck:
-      test: ["CMD", "redis-cli", "ping"]
+      test: ["CMD", "/usr/local/bin/redis-healthcheck"]
       interval: 5s
       timeout: 3s
       retries: 10
@@ -174,23 +191,25 @@ services:
       FTP_PASV_MAX_PORT: ${FTP_PASV_MAX_PORT}
     secrets:
       - ftp_password
-      - tls_certificate
-      - tls_private_key
+      - ftps_certificate
+      - ftps_private_key
     volumes:
       - wordpress_data:/srv/wordpress
     depends_on:
       wordpress:
         condition: service_healthy
     networks:
-      - frontend
       - edge
     ports:
       - "${FTP_PORT}:2121"
       - "${FTP_PASV_MIN_PORT}-${FTP_PASV_MAX_PORT}:${FTP_PASV_MIN_PORT}-${FTP_PASV_MAX_PORT}"
     read_only: true
     tmpfs:
-      - /run/proftpd:mode=0755
-      - /tmp:mode=1777
+      - /run/proftpd:mode=0755,size=16m,nosuid,nodev,noexec
+      - /tmp:mode=1777,size=64m,nosuid,nodev,noexec
+    mem_limit: 256m
+    cpus: 0.5
+    pids_limit: 128
     cap_drop: ["ALL"]
     cap_add: ["CHOWN", "DAC_OVERRIDE", "DAC_READ_SEARCH", "NET_BIND_SERVICE", "SETGID", "SETUID", "SYS_CHROOT"]
 
@@ -204,13 +223,15 @@ services:
     ports:
       - "127.0.0.1:8081:8080"
     networks:
-      - frontend
       - edge
     read_only: true
     tmpfs:
-      - /run/lighttpd:mode=0755,uid=33,gid=33
-      - /var/cache/lighttpd:mode=0755,uid=33,gid=33
-      - /tmp:mode=1777
+      - /run/lighttpd:mode=0755,uid=33,gid=33,size=8m,nosuid,nodev,noexec
+      - /var/cache/lighttpd:mode=0755,uid=33,gid=33,size=16m,nosuid,nodev,noexec
+      - /tmp:mode=1777,size=32m,nosuid,nodev,noexec
+    mem_limit: 128m
+    cpus: 0.25
+    pids_limit: 64
     cap_drop: ["ALL"]
     healthcheck:
       test: ["CMD", "wget", "--spider", "--quiet", "http://127.0.0.1:8080/"]
@@ -232,16 +253,18 @@ services:
       - "127.0.0.1:8080:8080"
     networks:
       - backend
-      - edge
     depends_on:
       mariadb:
         condition: service_healthy
     read_only: true
     tmpfs:
-      - /run/lighttpd:mode=0755,uid=33,gid=33
-      - /var/cache/lighttpd:mode=0755,uid=33,gid=33
-      - /tmp:mode=1777,uid=33,gid=33
-      - /var/lib/php/sessions:mode=0700,uid=33,gid=33
+      - /run/lighttpd:mode=0755,uid=33,gid=33,size=8m,nosuid,nodev,noexec
+      - /var/cache/lighttpd:mode=0755,uid=33,gid=33,size=16m,nosuid,nodev,noexec
+      - /tmp:mode=1777,uid=33,gid=33,size=32m,nosuid,nodev,noexec
+      - /var/lib/php/sessions:mode=0700,uid=33,gid=33,size=32m,nosuid,nodev,noexec
+    mem_limit: 256m
+    cpus: 0.5
+    pids_limit: 128
     cap_drop: ["ALL"]
     healthcheck:
       test: ["CMD", "wget", "--spider", "--quiet", "http://127.0.0.1:8080/"]
@@ -265,8 +288,9 @@ services:
       TZ: UTC
       MYSQL_DATABASE: ${MYSQL_DATABASE}
       MYSQL_USER: ${MYSQL_USER}
+      MYSQL_BACKUP_USER: ${MYSQL_BACKUP_USER}
     secrets:
-      - db_password
+      - db_backup_password
     volumes:
       - wordpress_data:/source:ro
       - backup_data:/backups
@@ -277,8 +301,11 @@ services:
         condition: service_healthy
     read_only: true
     tmpfs:
-      - /run:mode=0755
-      - /tmp:mode=1777
+      - /run:mode=0755,size=16m,nosuid,nodev,noexec
+      - /tmp:mode=1777,size=128m,nosuid,nodev,noexec
+    mem_limit: 768m
+    cpus: 1.0
+    pids_limit: 256
     cap_drop: ["ALL"]
     cap_add: ["DAC_OVERRIDE", "DAC_READ_SEARCH", "SETGID"]
 
@@ -311,13 +338,21 @@ secrets:
     file: ../secrets/db_password.txt
   db_root_password:
     file: ../secrets/db_root_password.txt
+  db_backup_password:
+    file: ../secrets/db_backup_password.txt
   wp_admin_password:
     file: ../secrets/wp_admin_password.txt
   wp_user_password:
     file: ../secrets/wp_user_password.txt
   ftp_password:
     file: ../secrets/ftp_password.txt
+  redis_password:
+    file: ../secrets/redis_password.txt
   tls_certificate:
     file: ../secrets/tls_certificate.pem
   tls_private_key:
     file: ../secrets/tls_private_key.pem
+  ftps_certificate:
+    file: ../secrets/ftps_certificate.pem
+  ftps_private_key:
+    file: ../secrets/ftps_private_key.pem

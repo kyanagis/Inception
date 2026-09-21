@@ -24,14 +24,17 @@ volumes=$(docker --host unix:///var/run/docker.sock volume ls --format '{{.Name}
 if printf '%s\n' "$volumes" | grep -Fx inception_mariadb_data >/dev/null; then
   established=true
 fi
-for name in db_password db_root_password wp_admin_password wp_user_password ftp_password; do
+for name in db_password db_root_password db_backup_password wp_admin_password wp_user_password ftp_password redis_password; do
   target="$secrets_dir/$name.txt"
   [ ! -L "$target" ] || { echo "Refusing symlink secret: $name" >&2; exit 1; }
   if [ -e "$target" ]; then
     [ -f "$target" ] && [ "$(wc -c < "$target")" -ge 64 ] && [ "$(wc -c < "$target")" -le 65 ] &&
       LC_ALL=C grep -Eq '^[0-9a-fA-F]{64}$' "$target" || { echo "Invalid existing secret: $name" >&2; exit 1; }
   else
-    [ "$established" = false ] || { echo "Missing secret with existing database volume: $name" >&2; exit 1; }
+    case "$name" in
+      db_backup_password|redis_password) ;;
+      *) [ "$established" = false ] || { echo "Missing secret with existing database volume: $name" >&2; exit 1; } ;;
+    esac
     temporary=$(mktemp "$secrets_dir/.secret.XXXXXXXX")
     openssl rand -hex 32 > "$temporary"
     mv -T "$temporary" "$target"
@@ -111,4 +114,26 @@ if ! verify_pair "$certificate" "$private_key"; then
   fi
 fi
 chmod 0600 "$private_key"
+
+ftps_certificate="$secrets_dir/ftps_certificate.pem"
+ftps_private_key="$secrets_dir/ftps_private_key.pem"
+if ! verify_pair "$ftps_certificate" "$ftps_private_key"; then
+  [ ! -e "$ftps_certificate" ] && [ ! -L "$ftps_certificate" ] &&
+    [ ! -e "$ftps_private_key" ] && [ ! -L "$ftps_private_key" ] || {
+      echo 'Existing FTPS certificate/key is invalid; refusing replacement' >&2; exit 1;
+    }
+  temporary_ftps=$(mktemp -d "$secrets_dir/.ftps.XXXXXXXX")
+  openssl req -x509 -newkey ec -pkeyopt ec_paramgen_curve:prime256v1 \
+    -sha256 -nodes -days 365 -keyout "$temporary_ftps/private-key.pem" \
+    -out "$temporary_ftps/certificate.pem" -subj "/CN=$domain_name" \
+    -addext "subjectAltName=DNS:$domain_name,DNS:localhost,IP:127.0.0.1" \
+    -addext 'keyUsage=critical,digitalSignature,keyAgreement' \
+    -addext 'extendedKeyUsage=serverAuth' >/dev/null 2>&1
+  verify_pair "$temporary_ftps/certificate.pem" "$temporary_ftps/private-key.pem" || exit 1
+  mv -T "$temporary_ftps/certificate.pem" "$ftps_certificate"
+  mv -T "$temporary_ftps/private-key.pem" "$ftps_private_key"
+  rmdir "$temporary_ftps"
+fi
+chmod 0644 "$ftps_certificate"
+chmod 0600 "$ftps_private_key"
 printf 'Setup complete for https://%s\n' "$domain_name"
