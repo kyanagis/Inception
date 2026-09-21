@@ -1,0 +1,7 @@
+Inception OVA release metadata
+==============================
+
+Submit commit: 1bd47e28906381326caa94586fbd71337c156332
+
+The OVA source commit and combined OVA SHA-256 are recorded in the GitHub
+Release's BUILD-PROVENANCE.txt and SHA256SUMS files.
