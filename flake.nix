@@ -32,6 +32,7 @@
         inherit system;
         modules = [
           baseModule
+          ./nix/tooling.nix
           hostBootModule
         ];
       };
@@ -39,6 +40,7 @@
         inherit system;
         modules = [
           baseModule
+          ./nix/tooling.nix
           ./nix/virtualbox.nix
         ];
       };
