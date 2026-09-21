@@ -5,7 +5,6 @@
 {
   allowUnfree ? false,
   hostName,
-  projectSource ? null,
   userName,
 }:
 {
@@ -21,8 +20,10 @@ let
     name = "inception-apply-login";
     runtimeInputs = with pkgs; [
       coreutils
+      docker
       gnugrep
       openssl
+      systemd
       util-linux
     ];
     text = ''
@@ -60,14 +61,28 @@ let
       install -d -m 0755 "$state_directory"
       install -d -m 0750 -o ${userName} -g users "/home/$login" "$data_directory"
 
-      project_directory="$bootstrap_home/Inception"
-      if [ -x "$project_directory/scripts/configure.sh" ]; then
-        runuser -u ${userName} -- "$project_directory/scripts/configure.sh" "$login"
-        runuser -u ${userName} -- "$project_directory/scripts/setup.sh"
+      docker_target="$data_directory/docker"
+      current_link=$(readlink "$bootstrap_home/data" || true)
+      if [ "$current_link" != "$data_directory" ]; then
+        [ -z "$(docker ps -aq)" ] || { echo "Docker has containers; refusing data-root switch" >&2; exit 3; }
+        [ -z "$(docker volume ls -q)" ] || { echo "Docker has volumes; refusing data-root switch" >&2; exit 3; }
+        [ -z "$(docker image ls -q)" ] || { echo "Docker has images; refusing data-root switch" >&2; exit 3; }
+        install -d -o root -g root -m 0710 "$docker_target"
+        systemctl stop docker.service docker.socket
+        rm -f "$bootstrap_home/data"
+        ln -s "$data_directory" "$bootstrap_home/data"
+        chown -h ${userName}:users "$bootstrap_home/data"
+        if ! systemctl start docker.socket docker.service ||
+           [ "$(readlink -f "$(docker info --format '{{.DockerRootDir}}')")" != "$(readlink -f "$docker_target")" ]; then
+          systemctl stop docker.service docker.socket || true
+          rm -f "$bootstrap_home/data"
+          ln -s ${loginStateDirectory}/bootstrap-data "$bootstrap_home/data"
+          chown -h ${userName}:users "$bootstrap_home/data"
+          systemctl start docker.socket docker.service || true
+          echo "Docker data-root switch failed and was rolled back" >&2
+          exit 4
+        fi
       fi
-
-      ln -sfn "$data_directory" "$bootstrap_home/data"
-      chown -h ${userName}:users "$bootstrap_home/data"
 
       # nss-myhostname resolves the transient FQDN to this VM, so the required
       # <login>.42.fr address works locally without modifying immutable /etc/hosts.
@@ -90,9 +105,6 @@ let
 
       printf 'Configured 42 login: %s\nDomain: %s\nData: %s\n' \
         "$login" "$domain" "$data_directory"
-      if [ -x "$project_directory/scripts/configure.sh" ]; then
-        printf 'Project configured: %s\n' "$project_directory"
-      fi
     '';
   };
 
@@ -284,6 +296,7 @@ in
   virtualisation.docker = {
     enable = true;
     autoPrune.enable = true;
+    daemon.settings.data-root = "/home/${userName}/data/docker";
   };
 
   users = {
@@ -355,24 +368,20 @@ in
   };
 
   systemd = {
-    services.inception-project = lib.mkIf (projectSource != null) {
-      description = "Install the Inception project into the appliance home";
-      wantedBy = [ "multi-user.target" ];
-      before = [ "display-manager.service" ];
-      after = [ "local-fs.target" ];
+    services.inception-docker-data-link = {
+      description = "Prepare the initial Docker data-root indirection";
+      requiredBy = [ "docker.service" ];
+      before = [ "docker.service" ];
       serviceConfig.Type = "oneshot";
       script = ''
-        target=/home/${userName}/Inception
-        if [ ! -e "$target/Makefile" ]; then
-          install -d -o ${userName} -g users -m 0755 "$target"
-          cp -a --no-preserve=ownership ${projectSource}/. "$target/"
-          chown -R ${userName}:users "$target"
-          chmod -R u+rwX,go+rX,go-w "$target"
-          chmod 0755 "$target/scripts/"*.sh
+        install -d -o root -g root -m 0710 ${loginStateDirectory}/bootstrap-data/docker
+        if [ ! -e /home/${userName}/data ] && [ ! -L /home/${userName}/data ]; then
+          ln -s ${loginStateDirectory}/bootstrap-data /home/${userName}/data
+          chown -h ${userName}:users /home/${userName}/data
         fi
+        test -L /home/${userName}/data
       '';
     };
-
     services.inception-login-state = {
       description = "Restore the configured Inception 42 login";
       wantedBy = [ "multi-user.target" ];

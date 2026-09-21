@@ -7,18 +7,6 @@
   userName,
 }:
 
-let
-  projectSource = builtins.path {
-    path = ../.;
-    name = "inception-test-project-source";
-    filter =
-      path: type:
-      let
-        base = builtins.baseNameOf path;
-      in
-      base != ".git" && base != "secrets" && base != "result" && !(pkgs.lib.hasPrefix "result-" base);
-  };
-in
 pkgs.testers.runNixOSTest {
   name = "inception-vm";
 
@@ -32,7 +20,6 @@ pkgs.testers.runNixOSTest {
       (import ./base.nix {
         inherit hostName userName;
         allowUnfree = false;
-        inherit projectSource;
       })
     ];
     virtualisation.memorySize = 1024;
@@ -63,29 +50,22 @@ pkgs.testers.runNixOSTest {
     machine.succeed("test $(stat -c %a /home/${userName}/.ssh/authorized_keys) = 600")
     machine.succeed("su - ${userName} -c 'ssh-setup --status'")
     machine.succeed("su - ${userName} -c 'ssh -o BatchMode=yes -o StrictHostKeyChecking=no -o UserKnownHostsFile=/tmp/inception-known-hosts -i /home/${userName}/client-key ${userName}@127.0.0.1 true'")
-    machine.succeed("test -x /home/${userName}/Inception/scripts/setup.sh")
-    machine.succeed("mkdir /home/${userName}/data")
+    machine.fail("test -e /home/${userName}/Inception")
+    machine.succeed("test $(readlink /home/${userName}/data) = /var/lib/inception/bootstrap-data")
+    machine.succeed("rm /home/${userName}/data && mkdir /home/${userName}/data")
     machine.fail("inception-apply-login rejected")
     machine.fail("test -e /var/lib/inception/login")
     machine.fail("test -e /var/lib/inception/environment")
-    machine.succeed("rmdir /home/${userName}/data")
-    machine.succeed("chmod 000 /home/${userName}/Inception/scripts/setup.sh")
-    machine.fail("inception-apply-login rejected")
-    machine.fail("test -e /var/lib/inception/login")
-    machine.fail("test -e /var/lib/inception/environment")
-    machine.fail("test -e /home/${userName}/data")
+    machine.succeed("rmdir /home/${userName}/data && ln -s /var/lib/inception/bootstrap-data /home/${userName}/data && chown -h ${userName}:users /home/${userName}/data")
     machine.succeed("test $(hostname) = ${hostName}")
-    machine.succeed("chmod 0755 /home/${userName}/Inception/scripts/setup.sh")
     machine.succeed("inception-apply-login peer42")
     machine.succeed("test -d /home/peer42/data")
     machine.succeed("test $(stat -c %U /home/peer42/data) = ${userName}")
     machine.succeed("test $(readlink /home/${userName}/data) = /home/peer42/data")
+    machine.succeed("test $(readlink -f $(docker info --format '{{.DockerRootDir}}')) = /home/peer42/data/docker")
     machine.succeed("grep -Fx INCEPTION_LOGIN=peer42 /var/lib/inception/environment")
     machine.succeed("grep -Fx DOMAIN_NAME=peer42.42.fr /var/lib/inception/environment")
     machine.succeed("test $(hostname) = peer42.42.fr")
     machine.succeed("getent hosts peer42.42.fr")
-    machine.succeed("grep -Fx DOMAIN_NAME=peer42.42.fr /home/${userName}/Inception/srcs/.env")
-    machine.succeed("test -s /home/${userName}/Inception/secrets/db_password.txt")
-    machine.succeed("su - ${userName} -c 'cd /home/${userName}/Inception && make check'")
   '';
 }

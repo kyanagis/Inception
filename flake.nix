@@ -20,17 +20,7 @@
       hostName = "inception";
       userName = "inception";
       pkgs = nixpkgs.legacyPackages.${system};
-      projectSource = builtins.path {
-        path = ./.;
-        name = "inception-project-source";
-        filter =
-          path: type:
-          let
-            base = builtins.baseNameOf path;
-          in
-          base != ".git" && base != "secrets" && base != "result" && !(nixpkgs.lib.hasPrefix "result-" base);
-      };
-      baseModule = import ./nix/base.nix { inherit hostName projectSource userName; };
+      baseModule = import ./nix/base.nix { inherit hostName userName; };
       hostBootModule = {
         fileSystems."/" = {
           device = "/dev/disk/by-label/nixos";
