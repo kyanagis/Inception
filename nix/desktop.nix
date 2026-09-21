@@ -5,6 +5,7 @@
 
 let
   loginWallpaper = "${pkgs.kdePackages.plasma-workspace-wallpapers}/share/wallpapers/DarkestHour/contents/images/1920x1080.jpg";
+  plasmaLoginManager = pkgs.callPackage ./plasma-login-manager.nix { };
 in
 {
   # Preserve the minimal lock-screen password field used by the VM without
@@ -63,7 +64,10 @@ in
     };
 
     displayManager = {
-      plasma-login-manager.enable = true;
+      plasma-login-manager = {
+        enable = true;
+        package = plasmaLoginManager;
+      };
       defaultSession = "plasma";
     };
 
