@@ -3,6 +3,10 @@ name: Build Inception OVA
 on:
   workflow_dispatch:
   push:
+    branches:
+      - main
+    paths:
+      - "nix/base.nix"
     tags:
       - "v*"
 
@@ -62,6 +66,12 @@ jobs:
           actual="$(cat inception.ova.part-* | sha256sum | awk '{print $1}')"
           test "$actual" = "$expected"
 
+          cat > release-body.md <<EOF
+          公開用Inception VirtualBox OVAです。GitHubの1ファイル容量制限に合わせてpartへ分割しています。
+          全partとinception.ova.sha256をダウンロードし、cat inception.ova.part-* > inception.ova で結合してください。
+          結合後のSHA-256: $expected
+          EOF
+
       - name: Upload OVA artifact
         uses: actions/upload-artifact@v4
         with:
@@ -72,7 +82,25 @@ jobs:
           if-no-files-found: error
           retention-days: 14
 
-      - name: Publish GitHub Release
+      - name: Move ova-latest tag
+        if: github.ref == 'refs/heads/main'
+        run: |
+          git tag -f ova-latest "$GITHUB_SHA"
+          git push --force origin refs/tags/ova-latest
+
+      - name: Publish latest GitHub Release
+        if: github.ref == 'refs/heads/main'
+        uses: softprops/action-gh-release@v2
+        with:
+          tag_name: ova-latest
+          name: Inception VirtualBox OVA
+          body_path: release-body.md
+          files: |
+            inception.ova.part-*
+            inception.ova.sha256
+          overwrite_files: true
+
+      - name: Publish versioned GitHub Release
         if: startsWith(github.ref, 'refs/tags/v')
         uses: softprops/action-gh-release@v2
         with:
