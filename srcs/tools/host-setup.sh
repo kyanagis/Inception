@@ -5,6 +5,9 @@ fail() { printf 'Host setup: %s\n' "$*" >&2; exit 1; }
 login=${1:-}
 case "$login" in ''|[!a-z]*|*[!a-z0-9-]*|*-|root|inception) fail 'Usage: host-setup.sh LOGIN (lowercase 42 login)' ;; esac
 [ "$#" -eq 1 ] && [ "${#login}" -le 32 ] || fail 'Invalid login length or arguments'
+if command -v inception-setup >/dev/null 2>&1 && [ -d /var/lib/inception ]; then
+  fail 'Published Inception OVA detected: do not run host-setup here; run inception-setup LOGIN instead'
+fi
 [ -z "${DOCKER_HOST+x}${DOCKER_CONTEXT+x}" ] || fail 'Unset DOCKER_HOST and DOCKER_CONTEXT'
 command -v docker >/dev/null 2>&1 || fail 'Docker must already be installed'
 [ "$(docker context show)" = default ] || fail 'Select the default Docker context'
