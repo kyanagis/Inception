@@ -51,8 +51,9 @@ COPY tools/entrypoint.sh /usr/local/bin/wordpress-entrypoint
 COPY tools/prepare-state.sh /usr/local/lib/inception/prepare-state.sh
 COPY tools/configure.php /usr/local/lib/inception/configure.php
 COPY tools/check-account.php /usr/local/lib/inception/check-account.php
+COPY tools/healthcheck.sh /usr/local/bin/wordpress-healthcheck
 
-RUN chmod 0555 /usr/local/bin/wordpress-entrypoint \
+RUN chmod 0555 /usr/local/bin/wordpress-entrypoint /usr/local/bin/wordpress-healthcheck \
     && rm -f /etc/php/8.2/fpm/pool.d/www.conf.default
 
 WORKDIR /var/www/html

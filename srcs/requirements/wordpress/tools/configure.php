@@ -7,6 +7,7 @@ $settings = [
     'DB_COLLATE' => '',
     'FORCE_SSL_ADMIN' => true,
     'DISALLOW_FILE_EDIT' => true,
+    'DISALLOW_FILE_MODS' => true,
     'WP_AUTO_UPDATE_CORE' => false,
     'AUTOMATIC_UPDATER_DISABLED' => true,
     'WP_REDIS_HOST' => 'redis',
@@ -24,6 +25,8 @@ foreach (['AUTH_KEY', 'SECURE_AUTH_KEY', 'LOGGED_IN_KEY', 'NONCE_KEY', 'AUTH_SAL
 }
 echo <<<'CONFIG'
 define('DB_PASSWORD', trim(file_get_contents('/run/php/db_password')));
+define('WP_REDIS_PASSWORD', trim(file_get_contents('/run/php/redis_password')));
+define('WP_REDIS_USERNAME', 'wordpress');
 define('WP_REDIS_DISABLED', getenv('WP_REDIS_DISABLED') !== '0');
 $table_prefix = 'wp_';
 if (!defined('ABSPATH')) {

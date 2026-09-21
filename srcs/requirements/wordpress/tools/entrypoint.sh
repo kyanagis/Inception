@@ -40,11 +40,11 @@ trap cleanup EXIT
 trap 'exit 143' TERM
 trap 'exit 130' INT
 trap 'exit 129' HUP
-for pair in db:db_password wp-admin:wp_admin_password wp-user:wp_user_password; do
+for pair in db:db_password redis:redis_password wp-admin:wp_admin_password wp-user:wp_user_password; do
     target=${pair%%:*}
     name=${pair#*:}
     password=$(secret "/run/secrets/$name")
-    case "$target" in db) runtime=/run/php/db_password;; *) runtime=/run/php/$target-password;; esac
+    case "$target" in db) runtime=/run/php/db_password;; redis) runtime=/run/php/redis_password;; *) runtime=/run/php/$target-password;; esac
     printf '%s\n' "$password" > "$runtime"
     chmod 0400 "$runtime"
     chown www-data:www-data "$runtime"
@@ -111,11 +111,25 @@ if ! as_wp user get "$WP_USER" --field=ID >/dev/null 2>&1; then
     as_wp user create "$WP_USER" "$WP_USER_EMAIL" --role=author --prompt=user_pass < /run/php/wp-user-password >/dev/null 2>&1 || fail "WordPress regular-user creation failed"
 fi
 as_wp eval-file /usr/local/lib/inception/check-account.php "$WP_USER" author /run/php/wp-user-password >/dev/null
+chown -R www-data:www-data "$html/wp-content"
+if [ "$WP_REDIS_DISABLED" = 0 ]; then
+    as_wp plugin activate redis-cache >/dev/null
+    as_wp redis enable >/dev/null
+else
+    as_wp redis disable >/dev/null 2>&1 || true
+fi
 if [ ! -f "$state/complete" ]; then
     as_wp rewrite structure '/%postname%/' --hard >/dev/null 2>&1
     printf '%s\n' inception-wordpress-v1 > "$state/complete.tmp"
     mv "$state/complete.tmp" "$state/complete"
 fi
+mkdir -p "$html/wp-content/uploads"
+find "$html" -xdev -type d -exec chown root:www-data {} + -exec chmod 0755 {} +
+find "$html" -xdev -type f -exec chown root:www-data {} + -exec chmod 0644 {} +
+find "$html/wp-content/uploads" -xdev -type d -exec chown www-data:www-data {} + -exec chmod 0755 {} +
+find "$html/wp-content/uploads" -xdev -type f -exec chown www-data:www-data {} + -exec chmod 0644 {} +
+chown root:www-data "$html/wp-config.php"
+chmod 0640 "$html/wp-config.php"
 cleanup
 trap - EXIT HUP INT TERM
 exec "$@"

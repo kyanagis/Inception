@@ -15,6 +15,22 @@ http {
     sendfile on;
     keepalive_timeout 30;
     client_max_body_size 64m;
+    client_body_timeout 15s;
+    client_header_timeout 15s;
+    send_timeout 30s;
+    limit_req_zone $binary_remote_addr zone=login:10m rate=5r/m;
+    limit_conn_zone $binary_remote_addr zone=perip:10m;
+
+    server {
+        listen 443 ssl default_server;
+        listen [::]:443 ssl default_server;
+        server_name _;
+        ssl_certificate /run/secrets/tls_certificate;
+        ssl_certificate_key /run/secrets/tls_private_key;
+        ssl_protocols TLSv1.2 TLSv1.3;
+        ssl_ciphers ECDHE-ECDSA-AES256-GCM-SHA384:ECDHE-ECDSA-CHACHA20-POLY1305:ECDHE-ECDSA-AES128-GCM-SHA256;
+        return 421;
+    }
 
     server {
         listen 443 ssl;
@@ -22,6 +38,7 @@ http {
         server_name __DOMAIN_NAME__;
         root /var/www/html;
         index index.php index.html;
+        limit_conn perip 20;
 
         ssl_certificate /run/secrets/tls_certificate;
         ssl_certificate_key /run/secrets/tls_private_key;
@@ -46,6 +63,18 @@ http {
 
         location / {
             try_files $uri $uri/ /index.php?$args;
+        }
+
+        location = /xmlrpc.php { return 403; }
+
+        location = /wp-login.php {
+            limit_req zone=login burst=5 nodelay;
+            include /etc/nginx/fastcgi_params;
+            fastcgi_pass wordpress:9000;
+            fastcgi_param SCRIPT_FILENAME $document_root$fastcgi_script_name;
+            fastcgi_param HTTPS on;
+            fastcgi_param HTTP_PROXY "";
+            fastcgi_read_timeout 120s;
         }
 
         # NGINX locations: https://nginx.org/en/docs/http/ngx_http_core_module.html#location
