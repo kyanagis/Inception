@@ -1,0 +1,86 @@
+Inception VM SSH設定手順
+=======================
+
+このOVAのSSHは公開鍵認証専用です。password認証とroot loginは無効です。
+初期パスワード inception をremote loginへ使用することはできません。
+
+1. 接続元で鍵を作る
+-------------------
+
+接続元のLinux、macOS、またはPowerShellで次を実行します。
+
+    ssh-keygen -t ed25519 -a 64
+
+秘密鍵は接続元だけで安全に保管してください。VMへコピーするのは `.pub` の公開鍵1行だけです。
+
+2. VMへ公開鍵を登録する
+-----------------------
+
+VMのTerminal（Win+Enter）で次を実行し、接続元の `.pub` の1行を貼り付けます。
+
+    ssh-setup
+
+VM内に公開鍵ファイルを置いた場合は、次でも登録できます。
+
+    ssh-setup /path/to/client-key.pub
+
+同じ公開鍵を再登録しても重複しません。状態、fingerprint、VM addressの確認:
+
+    ssh-setup --status
+
+登録済み鍵を削除するときは、VM上で次を開き、対象の公開鍵1行だけを削除します。
+
+    vim ~/.ssh/authorized_keys
+
+秘密鍵をVMの `~/.ssh` へ置かないでください。
+
+3. VirtualBox NATから接続する
+----------------------------
+
+OVAの既定NATでは、hostからguestのport 22へ直接接続できません。VMを停止し、VirtualBoxの
+Settings > Network > Adapter 1 > Advanced > Port Forwarding に次を追加します。
+
+    Name:       SSH
+    Protocol:   TCP
+    Host IP:    127.0.0.1
+    Host Port:  2222
+    Guest IP:   （空欄）
+    Guest Port: 22
+
+接続元で実行:
+
+    ssh -p 2222 inception@127.0.0.1
+
+初回接続時はhost key fingerprintをVM consoleと照合してから承認してください。
+
+    ssh-keygen -lf /etc/ssh/ssh_host_ed25519_key.pub
+
+4. Bridged / Host-only Adapterから接続する
+------------------------------------------
+
+VMでaddressを確認します。
+
+    ip -brief address
+
+接続元から実行します。
+
+    ssh inception@VM_ADDRESS
+
+Bridged AdapterはVMをLANへ露出します。信頼できないnetworkでは使用せず、通常はNATの
+127.0.0.1 port forwardingを推奨します。
+
+5. 接続できない場合
+--------------------
+
+VMで確認:
+
+    ssh-setup --status
+    systemctl status sshd
+    ss -ltn | grep ':22'
+
+接続元で詳細logを表示:
+
+    ssh -vvv -p 2222 inception@127.0.0.1
+
+公開鍵を変更しただけではVirtualBoxのport forwarding設定は変更されません。NATの場合は
+Host Port 2222 -> Guest Port 22 のruleも確認してください。
