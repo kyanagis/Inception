@@ -172,7 +172,10 @@ in
       OnlyShowIn=XFCE;
     '';
     systemPackages = with pkgs; [
+      firefox
       kitty
+      meld
+      vscodium
       vim
     ];
   };
