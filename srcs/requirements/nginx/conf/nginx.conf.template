@@ -77,9 +77,10 @@ http {
             fastcgi_read_timeout 120s;
         }
 
-        # NGINX locations: https://nginx.org/en/docs/http/ngx_http_core_module.html#location
+        # Prevent executable uploads and direct access to hidden metadata.
         location ~* /(?:uploads|files)/.*\.php$ { deny all; }
-        location ~ /\. { deny all; }\n        location ~* /(?:wp-config\.php|readme\.html|license\.txt) { deny all; }
+        location ~ /\. { deny all; }
+        location ~* /(?:wp-config\.php|readme\.html|license\.txt) { deny all; }
 
         location ~ \.php$ {
             try_files $uri =404;
