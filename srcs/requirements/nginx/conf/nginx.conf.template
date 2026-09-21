@@ -79,7 +79,7 @@ http {
 
         # NGINX locations: https://nginx.org/en/docs/http/ngx_http_core_module.html#location
         location ~* /(?:uploads|files)/.*\.php$ { deny all; }
-        location ~* /(?:\.git|\.env|wp-config\.php|readme\.html|license\.txt) { deny all; }
+        location ~ /\. { deny all; }\n        location ~* /(?:wp-config\.php|readme\.html|license\.txt) { deny all; }
 
         location ~ \.php$ {
             try_files $uri =404;
