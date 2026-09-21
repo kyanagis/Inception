@@ -1,0 +1,81 @@
+name: Submit Compatibility CI
+
+on:
+  push:
+    branches:
+      - submit
+  pull_request:
+    branches:
+      - submit
+  workflow_dispatch:
+
+concurrency:
+  group: submit-ci-${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+permissions:
+  contents: read
+
+jobs:
+  integration:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 150
+    steps:
+      - name: Checkout submit
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
+        with:
+          persist-credentials: false
+
+      - name: Prepare isolated Docker data-root
+        shell: bash
+        run: |
+          set -euo pipefail
+          sudo systemctl stop docker.service docker.socket || true
+          sudo install -d -o root -g root -m 0710 /home/runner/data/docker
+          config="$(sudo cat /etc/docker/daemon.json 2>/dev/null || printf '{}')"
+          printf '%s' "$config" | jq --arg root /home/runner/data/docker '. + {"data-root": $root}' |
+            sudo tee /etc/docker/daemon.json >/dev/null
+          sudo systemctl start docker.socket docker.service
+          for attempt in $(seq 1 60); do
+            if root="$(docker info --format '{{.DockerRootDir}}' 2>/dev/null)" &&
+               [ "$root" = /home/runner/data/docker ]; then
+              break
+            fi
+            sleep 1
+          done
+          test "$(docker info --format '{{.DockerRootDir}}')" = /home/runner/data/docker
+          printf '127.0.0.1 runner.42.fr\n' | sudo tee -a /etc/hosts >/dev/null
+
+      - name: Static, host, mandatory and adversarial checks
+        shell: bash
+        run: |
+          set -euo pipefail
+          make configure LOGIN=runner
+          make doctor
+          make check
+          make up
+          make test
+          make audit
+
+      - name: Bonus integration checks
+        shell: bash
+        run: |
+          set -euo pipefail
+          make bonus
+          make bonus-test
+          make audit
+
+      - name: Evidence
+        if: always()
+        shell: bash
+        run: |
+          git rev-parse HEAD || true
+          docker info --format 'DockerRootDir={{.DockerRootDir}}' || true
+          docker compose --env-file srcs/.env -f srcs/docker-compose.yml --profile bonus ps || true
+          docker ps --filter label=com.docker.compose.project=inception \
+            --format 'table {{.Names}}\t{{.Status}}\t{{.Ports}}' || true
+
+      - name: Cleanup
+        if: always()
+        shell: bash
+        run: docker compose --env-file srcs/.env -f srcs/docker-compose.yml --profile bonus down --volumes --remove-orphans || true
