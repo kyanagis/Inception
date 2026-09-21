@@ -5,7 +5,12 @@ RUN apt-get update \
     && rm -rf /var/lib/apt/lists/*
 
 COPY conf/redis.conf /etc/redis/inception.conf
+COPY tools/entrypoint.sh /usr/local/bin/redis-entrypoint
+COPY tools/healthcheck.sh /usr/local/bin/redis-healthcheck
+
+RUN chmod 0555 /usr/local/bin/redis-entrypoint /usr/local/bin/redis-healthcheck
 
 USER redis
 EXPOSE 6379
+ENTRYPOINT ["/usr/local/bin/redis-entrypoint"]
 CMD ["redis-server", "/etc/redis/inception.conf"]
