@@ -46,6 +46,9 @@ printf '%s' "$config" | jq -e '
     all(.value.tmpfs[]?; contains("size=") and contains("nosuid") and contains("nodev") and contains("noexec")))
 ' >/dev/null || fail 'Least-privilege service boundaries are incomplete'
 
+grep -Fqx '!tools/healthcheck.sh' srcs/requirements/wordpress/.dockerignore ||
+  fail 'WordPress .dockerignore excludes the healthcheck copied by its Dockerfile'
+
 for image in mariadb wordpress nginx redis ftp static-site adminer backup; do
   file=$(find srcs/requirements -path "*/$image/Dockerfile")
   [ "$(printf '%s\n' "$file" | wc -l)" -eq 1 ] && [ -f "$file" ] ||
