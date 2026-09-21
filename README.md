@@ -21,4 +21,4 @@ as well as completing the initial setup, see the README on the
 
 The OVA can be downloaded from the following Release:
 
-[Inception VirtualBox OVA Release](https://github.com/kyanagis/Inception/releases/tag/ova-latest)
+[Inception VirtualBox OVA Releases](https://github.com/kyanagis/Inception/releases)

@@ -22,27 +22,44 @@ Terminalから次を実行できます。
 
 設定後は新しいTerminalを開いてください。
 
-2. Inceptionの起動
+2. submitブランチの取得
+-----------------------
+
+OVAには評価対象の成果物を内包していません。Internet接続後、利用者自身が次を実行します。
+
+    cd /home/inception
+    git clone --branch submit --single-branch \
+      https://github.com/kyanagis/Inception.git Inception-submit
+    cd Inception-submit
+    test "$(git rev-parse HEAD)" = 1bd47e28906381326caa94586fbd71337c156332
+    make configure LOGIN="$INCEPTION_LOGIN"
+    make doctor
+    make check
+
+`main` や既定branchではなく、必ず `submit` を明示してください。上の `test` が失敗した場合は
+起動せず、Releaseの対応commitとremoteの状態を確認してください。
+
+3. Inceptionの起動
 ------------------
 
-    cd /home/inception/Inception
+    cd /home/inception/Inception-submit
     make up
     make status
-    ./scripts/smoke-test.sh
+    make test
 
 Browserで次を開きます。
 
     https://YOUR_42_LOGIN.42.fr
 
 自己署名証明書なので警告が表示されます。証明書のfingerprintを確認してから
-例外を承認してください。local secretは /home/inception/Inception/secrets/ にあり、
+例外を承認してください。local secretは /home/inception/Inception-submit/secrets/ にあり、
 公開repositoryやスクリーンショットへ含めないでください。
 
 Bonusを含めて起動する場合:
 
     make bonus
 
-3. Google ChromeとVisual Studio Code
+4. Google ChromeとVisual Studio Code
 -------------------------------------
 
 ChromeとVS CodeはライセンスとOVA容量の都合で同梱していません。Internet接続後、
@@ -64,7 +81,7 @@ Terminalでは次のコマンドも利用できます。
 
 削除する場合は `nix profile list` でentryを確認し、`nix profile remove` を使用します。
 
-4. よく使うコマンド
+5. よく使うコマンド
 --------------------
 
     make status      serviceとhealthの確認
@@ -76,3 +93,5 @@ Terminalでは次のコマンドも利用できます。
 
 `make fclean` 後もhost側の /home/YOUR_42_LOGIN/data 内の実データは自動削除しません。
 永続データを手動削除する前にbackupを確認してください。
+
+SSH接続は Desktop/SSH-SETUP.txt、問題発生時は Desktop/TROUBLESHOOTING-QA.txt を参照してください。

@@ -1,0 +1,63 @@
+Inception VM トラブルシューティングQ&A
+========================================
+
+Q. 最初に何を確認すればよいですか。
+A. Terminalで次を順に実行し、失敗した最初のコマンドの全文を保存してください。
+
+    inception-setup YOUR_LOGIN
+    cd /home/inception/Inception-submit
+    make doctor
+    make check
+    make status
+
+Q. repositoryが見つかりません。
+A. OVAは成果物を内包しません。Internet接続を確認し、次で取得します。
+
+    cd /home/inception
+    git clone --branch submit --single-branch \
+      https://github.com/kyanagis/Inception.git Inception-submit
+
+Q. `make doctor` がDocker data-rootの不一致を報告します。
+A. OVA内では `inception-setup YOUR_LOGIN` を先に一度だけ実行し、新しいTerminalを開きます。
+一般VM向けの `make host-setup` をOVA内で実行しないでください。改善しない場合は次を記録します。
+
+    docker info --format '{{.DockerRootDir}}'
+    readlink -f /home/inception/data/docker
+    systemctl status docker --no-pager
+
+Q. Web siteへ接続できません。
+A. 次を確認します。
+
+    make status
+    make logs
+    getent hosts "$DOMAIN_NAME"
+    curl -vk --resolve "$DOMAIN_NAME:443:127.0.0.1" "https://$DOMAIN_NAME/"
+
+port 80ではなくHTTPSのport 443を使用します。証明書警告を無条件に無視せず、fingerprintを確認してください。
+
+Q. SSH接続できません。
+A. Desktop/SSH-SETUP.txtに従い公開鍵を登録し、次を確認します。
+
+    ssh-setup --status
+    systemctl status sshd --no-pager
+
+NAT利用時はVirtualBox側に Host 127.0.0.1:2222 -> Guest :22 の転送規則が必要です。
+
+Q. passwordやsecretを紛失しました。
+A. repositoryの `secrets/` は公開・送信しないでください。既存volumeがある状態でsecretだけを再生成すると
+復旧不能になるため、上書きしません。backupと元のsecretを確保し、USER_DOCの復旧手順を確認してください。
+
+Q. `make fclean` を実行してよいですか。
+A. container、image、named volumeを削除する破壊的操作です。必要なbackupを検証してから実行してください。
+`/home/YOUR_LOGIN/data` の手動削除は、さらに復旧困難な操作です。
+
+Q. 支援を依頼するとき何を共有しますか。
+A. secret、秘密鍵、cookie、database内容を除外し、次だけを共有してください。
+
+    git rev-parse HEAD
+    make doctor の出力
+    make status の出力
+    docker version
+    docker compose version
+
+ログを共有する前に認証情報や個人情報が含まれないことを必ず確認してください。

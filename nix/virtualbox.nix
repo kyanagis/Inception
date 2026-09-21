@@ -14,6 +14,8 @@ let
   userName = "inception";
   setupGuide = ./config/INCEPTION-SETUP.txt;
   sshGuide = ./config/SSH-SETUP.txt;
+  qaGuide = ./config/TROUBLESHOOTING-QA.txt;
+  releaseMetadata = ./config/RELEASE-METADATA.txt;
   kittyConf = pkgs.writeText "inception-kitty.conf" ''
     confirm_os_window_close 0
     enable_audio_bell no
@@ -249,6 +251,8 @@ in
       install -o ${userName} -g users -m 0755 ${xfceSession} /home/${userName}/.xsession
       install -o ${userName} -g users -m 0644 ${setupGuide} /home/${userName}/Desktop/INCEPTION-SETUP.txt
       install -o ${userName} -g users -m 0644 ${sshGuide} /home/${userName}/Desktop/SSH-SETUP.txt
+      install -o ${userName} -g users -m 0644 ${qaGuide} /home/${userName}/Desktop/TROUBLESHOOTING-QA.txt
+      install -o ${userName} -g users -m 0644 ${releaseMetadata} /home/${userName}/Desktop/RELEASE-METADATA.txt
     '';
   };
 

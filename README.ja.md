@@ -22,4 +22,4 @@ VirtualBoxへのインポート方法、初回設定方法については、
 
 OVA本体は次のReleaseから取得できます。
 
-[Inception VirtualBox OVA Release](https://github.com/kyanagis/Inception/releases/tag/ova-latest)
+[Inception VirtualBox OVA Releases](https://github.com/kyanagis/Inception/releases)
