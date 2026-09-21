@@ -166,7 +166,7 @@ services:
       - backend
     read_only: true
     tmpfs:
-      - /run/redis:mode=0700,uid=101,gid=101,size=16m,nosuid,nodev,noexec
+      - /run/redis:mode=0700,size=16m,nosuid,nodev,noexec
       - /tmp:mode=1777,size=64m,nosuid,nodev,noexec
     mem_limit: 256m
     cpus: 0.5
