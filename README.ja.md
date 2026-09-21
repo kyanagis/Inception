@@ -1,25 +1,24 @@
-# Inception
+# Inception Universal OVA
 
 [English](README.md)
 
-これは42のInception projectです。
+Inceptionの評価・開発に使う再利用可能なVirtualBox環境です。
 
-複数のコンテナから構成される小規模なインフラを構築し、
-TLS自己証明書を発行してWebサービスをHTTPSで公開することが課題の目的です。
+このOVAは評価対象のsourceを内包せず、特定の`submit` commitにも固定しません。初回設定後、実行時にcurrent `submit` branchを取得します。
 
-## 環境構築について
+    inception-setup YOUR_42_LOGIN
+    inception-evaluate --prepare
 
-公開しているReleaseには、Inception課題を進めるための
-NixOSベースのVirtualBox環境を構築したOVAが含まれています。
+mandatoryとbonusをまとめて完全検証する場合:
 
-OVAにはNixOS、KDE Plasma、Docker、Docker Composeなど、
-課題を進めるための基本的な作業環境が含まれています。
+    inception-evaluate --full
 
-OVAのダウンロード方法、結合方法、SHA-256の確認方法、
-VirtualBoxへのインポート方法、初回設定方法については、
-[`inception-ova`ブランチ](https://github.com/kyanagis/Inception/tree/inception-ova)
-のREADMEを参照してください。
+OVAにはDocker/Compose、Nix、jq、Python、C/C++ build tools、GDB、strace、shellcheck、nmap、tcpdump、socat、Git、ripgrep、rsync、tmux、Firefox、VSCodium、Meld、Kitty、Vim、仮説駆動診断用の`inception-audit`を同梱します。
 
-OVA本体は次のReleaseから取得できます。
+通常の`submit`変更ではOVAを再生成しません。evaluatorはcleanなlocal checkoutを`origin/submit`へfast-forwardします。将来通常のuserspace commandが追加で必要になった場合は、submit側の`.inception/host-tools`でcommandと安全なnixpkgs attributeを宣言でき、不足packageだけephemeral Nix shellで補完します。
 
-[Inception VirtualBox OVA Release](https://github.com/kyanagis/Inception/releases/tag/ova-latest)
+guest kernel機能、CPU architecture、VirtualBox hardware定義、base disk容量など、OVAそのもののhost-level要件が変わる場合は再生成対象です。
+
+OVA CIは生成前にcurrent `submit`のmandatory/bonusを実際に起動・検証し、その後manifest、VirtualBox import、split artifact checksumまで確認します。
+
+`main`の成功buildは検証済みartifactを`ova-latest` Releaseへ反映し、version tagはimmutableなversioned releaseを作成します。
