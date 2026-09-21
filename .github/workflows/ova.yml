@@ -6,7 +6,10 @@ on:
     branches:
       - main
     paths:
-      - "nix/base.nix"
+      - "flake.nix"
+      - "flake.lock"
+      - "nix/**"
+      - ".github/workflows/ova.yml"
     tags:
       - "v*"
 
@@ -20,16 +23,6 @@ jobs:
     steps:
       - name: Checkout Inception
         uses: actions/checkout@v4
-
-      # nixos-config is private, so its deploy key must be added as the
-      # NIXOS_CONFIG_DEPLOY_KEY repository secret.
-      - name: Load nixos-config deploy key
-        uses: webfactory/ssh-agent@v0.9.1
-        with:
-          ssh-private-key: ${{ secrets.NIXOS_CONFIG_DEPLOY_KEY }}
-
-      - name: Trust GitHub SSH host key
-        run: ssh-keyscan github.com >> "$HOME/.ssh/known_hosts"
 
       - name: Install Nix
         uses: cachix/install-nix-action@v31

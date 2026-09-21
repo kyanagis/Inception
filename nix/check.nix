@@ -32,7 +32,7 @@ pkgs.testers.runNixOSTest {
     machine.succeed("id ${userName}")
     machine.succeed("su - ${userName} -c 'docker info >/dev/null'")
     machine.succeed("su - ${userName} -c 'docker compose version'")
-    machine.succeed("inception-apply-login peer42")
+    machine.succeed("su - ${userName} -c 'inception-setup peer42'")
     machine.succeed("test -d /home/peer42/data")
     machine.succeed("test $(stat -c %U /home/peer42/data) = ${userName}")
     machine.succeed("test $(readlink /home/${userName}/data) = /home/peer42/data")

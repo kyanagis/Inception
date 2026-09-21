@@ -9,13 +9,6 @@
   inputs = {
     nixpkgs.url = "github:NixOS/nixpkgs/nixos-26.05";
 
-    desktop-config = {
-      url = "git+ssh://git@github.com/kyanagis/nixos-config.git";
-      inputs.nixpkgs.follows = "nixpkgs";
-      inputs.home-manager.follows = "home-manager";
-      inputs.plasma-manager.follows = "plasma-manager";
-    };
-
     home-manager = {
       url = "github:nix-community/home-manager/release-26.05";
       inputs.nixpkgs.follows = "nixpkgs";
@@ -31,7 +24,6 @@
   outputs =
     {
       nixpkgs,
-      desktop-config,
       home-manager,
       plasma-manager,
       ...
@@ -53,7 +45,7 @@
         inherit system;
         modules = [
           baseModule
-          (import "${desktop-config}/modules/system/desktop.nix")
+          ./nix/desktop.nix
           hostBootModule
         ];
       };
@@ -61,7 +53,7 @@
         inherit system;
         modules = [
           baseModule
-          (import "${desktop-config}/modules/system/desktop.nix")
+          ./nix/desktop.nix
           home-manager.nixosModules.home-manager
           {
             home-manager = {
@@ -69,20 +61,13 @@
               useUserPackages = true;
               extraSpecialArgs = {
                 inherit userName;
-                inputs = {
-                  inherit desktop-config home-manager plasma-manager;
-                };
               };
               sharedModules = [
                 plasma-manager.homeModules.plasma-manager
               ];
               users.${userName} = {
                 imports = [
-                  "${desktop-config}/modules/home/git.nix"
-                  "${desktop-config}/modules/home/kitty.nix"
-                  "${desktop-config}/modules/home/plasma.nix"
-                  "${desktop-config}/modules/home/vim.nix"
-                  "${desktop-config}/modules/home/wallpaper.nix"
+                  ./nix/home.nix
                 ];
 
                 home = {
@@ -90,7 +75,7 @@
                     bibata-cursors
                     papirus-nord
                     plasma-panel-colorizer
-                    (callPackage "${desktop-config}/packages/nordic-plasma-theme.nix" { })
+                    (callPackage ./nix/nordic-plasma-theme.nix { })
                   ];
 
                   username = userName;
@@ -171,6 +156,5 @@
       };
 
       formatter.${system} = pkgs.nixfmt-tree;
-
     };
 }
