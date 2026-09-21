@@ -33,13 +33,10 @@ bonus-build: setup
 
 up: setup
 	WP_REDIS_DISABLED=1 $(COMPOSE) up --detach --build --remove-orphans --wait --wait-timeout 180
-	$(COMPOSE) exec -T --user www-data -e WP_REDIS_DISABLED=1 wordpress sh -ec 'if wp plugin is-active redis-cache --path=/var/www/html; then wp redis disable --path=/var/www/html; fi'
 	$(COMPOSE) --profile bonus stop redis ftp static-site adminer backup
 
 bonus: setup
 	WP_REDIS_DISABLED=0 $(COMPOSE) --profile bonus up --detach --build --remove-orphans --wait --wait-timeout 180
-	$(COMPOSE) exec -T --user www-data -e WP_REDIS_DISABLED=1 wordpress wp plugin activate redis-cache --path=/var/www/html
-	$(COMPOSE) exec -T --user www-data -e WP_REDIS_DISABLED=1 wordpress wp redis enable --path=/var/www/html
 
 down: preflight
 	$(COMPOSE) --profile bonus down --remove-orphans
