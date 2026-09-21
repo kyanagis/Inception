@@ -7,3 +7,4 @@
 !tools/configure.php
 !tools/entrypoint.sh
 !tools/prepare-state.sh
+!tools/healthcheck.sh
