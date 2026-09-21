@@ -21,6 +21,7 @@ pkgs.testers.runNixOSTest {
         inherit hostName userName;
         allowUnfree = false;
       })
+      ./tooling.nix
     ];
     virtualisation.memorySize = 1024;
   };
@@ -33,6 +34,8 @@ pkgs.testers.runNixOSTest {
     machine.succeed("id ${userName}")
     machine.succeed("su - ${userName} -c 'docker info >/dev/null'")
     machine.succeed("su - ${userName} -c 'docker compose version'")
+    machine.succeed("for cmd in jq python3 ip shellcheck git make curl openssl nmap tcpdump inception-evaluate inception-audit; do command -v \"$cmd\"; done")
+    machine.succeed("inception-evaluate --help")
     machine.succeed("command -v ssh-setup")
     machine.succeed("sshd -T | grep -Fxi 'passwordauthentication no'")
     machine.succeed("sshd -T | grep -Fxi 'kbdinteractiveauthentication no'")
@@ -67,5 +70,6 @@ pkgs.testers.runNixOSTest {
     machine.succeed("grep -Fx DOMAIN_NAME=peer42.42.fr /var/lib/inception/environment")
     machine.succeed("test $(hostname) = peer42.42.fr")
     machine.succeed("getent hosts peer42.42.fr")
+    machine.succeed("inception-audit")
   '';
 }
