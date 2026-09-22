@@ -1,4 +1,4 @@
-{ pkgs, ... }:
+{ config, pkgs, ... }:
 
 let
   inceptionEvaluate = pkgs.writeShellApplication {
@@ -51,7 +51,9 @@ let
   };
 in
 {
-  environment.etc."inception-host-abi".text = "1\n";
+  environment.etc."inception-host-abi".text = "2\n";
+  environment.etc."inception-kernel-version".text =
+    "${config.boot.kernelPackages.kernel.modDirVersion}\n";
 
   # Broad, license-free baseline.  Ordinary submit changes should consume this
   # environment instead of forcing a new appliance build.  If a future submit
