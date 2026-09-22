@@ -11,20 +11,21 @@ usage() {
 Usage: inception-evaluate [MODE] [--repo DIR] [--no-update]
 
 Modes:
-  --prepare      Fetch current submit and run configure/doctor/check (default)
-  --mandatory    Prepare, build/start mandatory stack, run test and audit
-  --bonus        Prepare, start full bonus stack, run bonus-test and audit
-  --full         Run mandatory validation, then bonus validation
-  --audit        Prepare and run the hypothesis-driven audit
-  --update-only  Fetch/fast-forward current submit only
+  --prepare      Sync current submit and run its prepare contract (default)
+  --mandatory    Run submit mandatory evaluation
+  --bonus        Run submit bonus evaluation
+  --full         Run mandatory then bonus evaluation
+  --audit        Run submit audit contract
+  --update-only  Sync current submit only
 
-The appliance is not tied to a submit commit.  Missing ordinary host commands
-declared in .inception/host-tools are supplied through an ephemeral Nix shell.
+The appliance owns only the bootstrap contract. Project-specific evaluation
+lives in submit/.inception/evaluate so future Makefile/internal changes do not
+require rebuilding the OVA.
 EOF
 }
 
 mode=prepare
-repo_dir=${INCEPTION_REPO_DIR:-/home/inception/Inception-submit}
+repo_dir=${INCEPTION_REPO_DIR:-/home/inception/Inception-eval}
 remote=${INCEPTION_REPO_URL:-https://github.com/kyanagis/Inception.git}
 update=1
 
@@ -35,7 +36,7 @@ while (($#)); do
     --bonus) mode=bonus ;;
     --full) mode=full ;;
     --audit) mode=audit ;;
-    --update-only) mode='update-only' ;;
+    --update-only) mode=update-only ;;
     --no-update) update=0 ;;
     --repo)
       shift
@@ -75,21 +76,25 @@ if [[ ! -d "$repo_dir/.git" ]]; then
   mkdir -p "$(dirname "$repo_dir")"
   git clone --branch submit --single-branch "$remote" "$repo_dir"
 elif ((update)); then
-  [[ -z "$(git -C "$repo_dir" status --porcelain --untracked-files=no)" ]] ||
-    fail 'tracked local changes exist; commit/stash them before updating'
+  git -C "$repo_dir" remote set-url origin "$remote"
   git -C "$repo_dir" fetch --prune origin refs/heads/submit:refs/remotes/origin/submit
-  if git -C "$repo_dir" show-ref --verify --quiet refs/heads/submit; then
-    git -C "$repo_dir" switch submit >/dev/null
-  else
-    git -C "$repo_dir" switch --create submit --track origin/submit >/dev/null
-  fi
-  git -C "$repo_dir" merge-base --is-ancestor HEAD origin/submit ||
-    fail 'local submit contains commits not present in origin/submit; refusing to rewrite it'
-  git -C "$repo_dir" merge --ff-only origin/submit >/dev/null
+  git -C "$repo_dir" checkout -B submit origin/submit >/dev/null
+  git -C "$repo_dir" reset --hard origin/submit >/dev/null
+  # The evaluator checkout is disposable, but generated credentials/state must
+  # survive source updates. Remove other untracked files that could shadow a
+  # newly tracked path while preserving runtime state.
+  git -C "$repo_dir" clean -fdx -e secrets/ -e srcs/.env >/dev/null
 fi
 
 submit_sha=$(git -C "$repo_dir" rev-parse HEAD)
 printf 'submit=%s\nrepo=%s\n' "$submit_sha" "$repo_dir"
+
+host_abi_file="$repo_dir/.inception/host-abi"
+if [[ -f "$host_abi_file" ]]; then
+  required_abi=$(tr -d '[:space:]' < "$host_abi_file")
+  [[ "$required_abi" =~ ^[0-9]+$ ]] || fail 'invalid submit host ABI declaration'
+  inception-host-update --ensure "$required_abi"
+fi
 
 declare -a missing=()
 contract="$repo_dir/.inception/host-tools"
@@ -125,35 +130,9 @@ if (("${#missing[@]}" > 0)); then
 fi
 
 [[ "$mode" != update-only ]] || exit 0
+[[ -f "$repo_dir/.inception/evaluate" ]] ||
+  fail 'submit does not provide .inception/evaluate stable ABI'
 
-run make -C "$repo_dir" configure LOGIN="$INCEPTION_LOGIN"
-run make -C "$repo_dir" doctor
-run make -C "$repo_dir" check
-
-case "$mode" in
-  prepare)
-    ;;
-  mandatory)
-    run make -C "$repo_dir" up
-    run make -C "$repo_dir" test
-    run make -C "$repo_dir" audit
-    ;;
-  bonus)
-    run make -C "$repo_dir" bonus
-    run make -C "$repo_dir" bonus-test
-    run make -C "$repo_dir" audit
-    ;;
-  full)
-    run make -C "$repo_dir" up
-    run make -C "$repo_dir" test
-    run make -C "$repo_dir" audit
-    run make -C "$repo_dir" bonus
-    run make -C "$repo_dir" bonus-test
-    run make -C "$repo_dir" audit
-    ;;
-  audit)
-    run make -C "$repo_dir" audit
-    ;;
-esac
-
+cd "$repo_dir"
+run sh ./.inception/evaluate "$mode"
 printf 'inception-evaluate completed mode=%s submit=%s\n' "$mode" "$submit_sha"
