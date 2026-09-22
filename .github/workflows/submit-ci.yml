@@ -29,6 +29,25 @@ jobs:
       - name: Install Nix for forward-compatible tool checks
         uses: DeterminateSystems/determinate-nix-action@527f17dd63d2d60d3e5552934bc84b9a33a14d11 # v3.22.2
 
+      - name: Validate required host ABI exists on main
+        shell: bash
+        run: |
+          set -euo pipefail
+          required="$(tr -d '[:space:]' < .inception/host-abi)"
+          [[ "$required" =~ ^[0-9]+$ ]] || { echo "Invalid submit host ABI: $required" >&2; exit 1; }
+          git fetch --depth=1 origin main:refs/remotes/origin/main
+          provided="$(
+            git show refs/remotes/origin/main:nix/tooling.nix |
+              sed -n 's/.*inception-host-abi".text = "\([0-9][0-9]*\)\\n";.*/\1/p' |
+              head -n 1
+          )"
+          [[ "$provided" =~ ^[0-9]+$ ]] || { echo "Unable to parse main host ABI" >&2; exit 1; }
+          if [ "$required" -gt "$provided" ]; then
+            echo "submit requires host ABI $required but main only provides $provided" >&2
+            exit 1
+          fi
+          printf 'Host ABI contract satisfied: submit=%s main=%s\n' "$required" "$provided"
+
       - name: Validate universal OVA tool declarations
         shell: bash
         run: |
