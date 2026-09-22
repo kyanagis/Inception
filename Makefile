@@ -3,11 +3,18 @@ COMPOSE := docker --host unix:///var/run/docker.sock compose --env-file srcs/.en
 export LOGIN
 .DEFAULT_GOAL := all
 .NOTPARALLEL:
-.PHONY: all auto-configure host-setup configure preflight doctor setup config build bonus-build up bonus down stop start restart status logs check audit test bonus-test backup-now backup-list backup-verify clean fclean re help
+.PHONY: all host-ready auto-configure host-setup configure preflight doctor setup config build bonus-build up bonus down stop start restart status logs check audit test bonus-test backup-now backup-list backup-verify clean fclean re help
 
 all: up
 
-auto-configure:
+host-ready:
+	@set -eu; \
+	if command -v inception-host-update >/dev/null 2>&1 && [ -f .inception/host-abi ]; then \
+	  expected=$(tr -d '[:space:]' < .inception/host-abi); \
+	  inception-host-update --ensure "$expected"; \
+	fi
+
+auto-configure: host-ready
 	@set -eu; \
 	login="${LOGIN:-${INCEPTION_LOGIN:-}}"; \
 	if [ -f srcs/.env ]; then \
@@ -23,7 +30,7 @@ host-setup:
 configure:
 	@set -eu; login="${LOGIN:-${INCEPTION_LOGIN:-}}"; [ -n "$login" ] || { printf '%s\n' 'Usage: make configure LOGIN=login' >&2; exit 2; }; ./srcs/tools/configure.sh "$login"
 
-preflight: auto-configure
+preflight: host-ready auto-configure
 	@./srcs/tools/preflight.sh
 
 doctor: preflight
