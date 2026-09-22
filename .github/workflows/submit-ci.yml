@@ -26,6 +26,25 @@ jobs:
         with:
           persist-credentials: false
 
+      - name: Install Nix for forward-compatible tool checks
+        uses: DeterminateSystems/determinate-nix-action@527f17dd63d2d60d3e5552934bc84b9a33a14d11 # v3.22.2
+
+      - name: Validate universal OVA tool declarations
+        shell: bash
+        run: |
+          set -euo pipefail
+          test -f .inception/host-tools
+          while read -r command package extra; do
+            [[ -z "${command:-}" || "$command" == \#* ]] && continue
+            test -n "${package:-}"
+            test -z "${extra:-}"
+            [[ "$command" =~ ^[A-Za-z0-9._+-]+$ ]]
+            [[ "$package" =~ ^[A-Za-z0-9._+-]+$ ]]
+            if ! command -v "$command" >/dev/null 2>&1; then
+              nix build --no-link "nixpkgs#$package"
+            fi
+          done < .inception/host-tools
+
       - name: Prepare isolated Docker data-root
         shell: bash
         run: |
@@ -56,6 +75,10 @@ jobs:
           make up
           make test
           make audit
+          site_before="$(docker compose --env-file srcs/.env -f srcs/docker-compose.yml exec -T --user www-data wordpress wp option get siteurl --path=/var/www/html)"
+          make restart
+          site_after="$(docker compose --env-file srcs/.env -f srcs/docker-compose.yml exec -T --user www-data wordpress wp option get siteurl --path=/var/www/html)"
+          test "$site_before" = "$site_after"
 
       - name: Bonus integration checks
         shell: bash
