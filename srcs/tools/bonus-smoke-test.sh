@@ -49,8 +49,26 @@ $compose exec -T wordpress sh -ec '
 '
 $compose exec -T --user www-data wordpress wp plugin is-active redis-cache --path=/var/www/html >/dev/null ||
   fail 'Redis Cache plugin is not active after bonus convergence'
-$compose exec -T --user www-data wordpress wp redis status --path=/var/www/html >/dev/null ||
-  fail 'Redis WP-CLI command is unavailable after bonus hardening'
+$compose exec -T wordpress test -f /var/www/html/wp-content/object-cache.php ||
+  fail 'Redis object-cache drop-in is missing after bonus convergence'
+cache_probe="inception_smoke_$(date +%s)_$"
+$compose exec -T --user www-data wordpress wp eval "
+  global \$wp_object_cache;
+  if (!method_exists(\$wp_object_cache, 'redis_status') || !\$wp_object_cache->redis_status()) {
+      fwrite(STDERR, 'redis_status=false\\n');
+      exit(11);
+  }
+  if (!wp_cache_set('$cache_probe', 'ok', 'inception-smoke', 30)) {
+      fwrite(STDERR, 'wp_cache_set failed\\n');
+      exit(12);
+  }
+  if (wp_cache_get('$cache_probe', 'inception-smoke') !== 'ok') {
+      fwrite(STDERR, 'wp_cache_get mismatch\\n');
+      exit(13);
+  }
+  wp_cache_delete('$cache_probe', 'inception-smoke');
+" --path=/var/www/html >/dev/null ||
+  fail 'WordPress Redis object-cache functional probe failed'
 
 # Prove explicit FTPS negotiates TLS with the generated certificate.
 timeout 15 openssl s_client -starttls ftp   -connect "127.0.0.1:$FTP_PORT"   -servername "$DOMAIN_NAME"   -verify_hostname "$DOMAIN_NAME"   -verify_return_error   -CAfile secrets/ftps_certificate.pem </dev/null >/dev/null 2>&1 ||
