@@ -114,7 +114,10 @@ help:
 	@printf '%s\n' \
 	'Published OVA first use:' \
 	'  inception-setup login' \
-	'  inception-evaluate --prepare' \
+	'  git clone --branch submit --single-branch https://github.com/kyanagis/Inception.git Inception && cd Inception' \
+	'  make' \
+	'  make test' \
+	'Evaluator-managed disposable checkout: inception-evaluate --full' \
 	'' \
 	'Generic dedicated Debian VM first use:' \
 	'  make configure LOGIN=login' \
