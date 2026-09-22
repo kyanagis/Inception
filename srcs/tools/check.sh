@@ -18,6 +18,25 @@ for heading in Description Instructions Resources; do
   grep -Eq "^##+ $heading$" README.md || fail "README lacks $heading"
 done
 
+host_abi=$(tr -d '[:space:]' < .inception/host-abi)
+ftp_port=$(sed -n 's/^FTP_PORT=//p' srcs/.env)
+ftp_pasv_min=$(sed -n 's/^FTP_PASV_MIN_PORT=//p' srcs/.env)
+ftp_pasv_max=$(sed -n 's/^FTP_PASV_MAX_PORT=//p' srcs/.env)
+case "$host_abi:$ftp_port:$ftp_pasv_min:$ftp_pasv_max" in
+  *[!0-9:]*) fail 'Host contract numeric values are invalid' ;;
+esac
+jq -e   --argjson abi "$host_abi"   --argjson ftp "$ftp_port"   --argjson pmin "$ftp_pasv_min"   --argjson pmax "$ftp_pasv_max" '
+    .schema == 1 and
+    .host_abi == $abi and
+    .architecture == "x86_64" and
+    (.docker_engine_min | test("^[0-9]+\\.[0-9]+\\.[0-9]+$")) and
+    (.docker_compose_min | test("^[0-9]+\\.[0-9]+\\.[0-9]+$")) and
+    (.public_tcp_ports | sort == ([443, $ftp] | sort)) and
+    (.public_tcp_ranges == [{"from": $pmin, "to": $pmax}]) and
+    (.loopback_tcp_ports | sort == [8080, 8081])
+  ' .inception/host-contract.json >/dev/null ||
+  fail 'Declared host contract does not match the project exposure contract'
+
 config=$(docker compose --env-file srcs/.env -f srcs/docker-compose.yml --profile bonus config --format json)
 printf '%s' "$config" | jq -e '
   (.services | length == 8) and
