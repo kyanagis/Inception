@@ -10,7 +10,6 @@ binlog-format = ROW
 max-connections = 100
 local-infile = 0
 secure-file-priv = /usr/share/mariadb-secure-files
-log-error = /dev/stderr
 
 [client]
 default-character-set = utf8mb4
