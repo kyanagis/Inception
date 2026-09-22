@@ -1,6 +1,6 @@
 {
   "schema": 1,
-  "host_abi": 1,
+  "host_abi": 3,
   "architecture": "x86_64",
   "docker_engine_min": "27.0.3",
   "docker_compose_min": "2.38.2",
