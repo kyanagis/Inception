@@ -34,7 +34,7 @@ pkgs.testers.runNixOSTest {
     machine.succeed("id ${userName}")
     machine.succeed("su - ${userName} -c 'docker info >/dev/null'")
     machine.succeed("su - ${userName} -c 'docker compose version'")
-    machine.succeed("for cmd in jq python3 ip shellcheck git make curl openssl nmap tcpdump inception-evaluate inception-audit; do command -v \"$cmd\"; done")
+    machine.succeed("for cmd in jq python3 ip shellcheck git make curl openssl nmap tcpdump gdb valgrind gh vscodium firefox inception-evaluate inception-audit inception-diagnostics; do command -v \"$cmd\"; done")
     machine.succeed("inception-evaluate --help")
     machine.succeed("command -v ssh-setup")
     machine.succeed("sshd -T | grep -Fxi 'passwordauthentication no'")
