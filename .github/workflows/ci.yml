@@ -49,14 +49,22 @@ jobs:
             nix/scripts/inception-host-update.sh
             nix/scripts/inception-evaluate.sh
           )
-          changed="$(git diff --name-only "$base" "$GITHUB_SHA" -- "${runtime_paths[@]}")"
-          [ -n "$changed" ] || exit 0
-
           extract_abi() {
             sed -n 's/.*inception-host-abi".text = "\([0-9][0-9]*\)\\n";.*/\1/p' | head -n 1
           }
-          old_abi="$(git show "$base:nix/tooling.nix" | extract_abi)"
           new_abi="$(extract_abi < nix/tooling.nix)"
+          [ -n "$new_abi" ] || {
+            echo "Unable to parse current host ABI from nix/tooling.nix" >&2
+            exit 1
+          }
+
+          changed="$(git diff --name-only "$base" "$GITHUB_SHA" -- "${runtime_paths[@]}")"
+          [ -n "$changed" ] || {
+            printf 'Current host ABI parses as %s; no runtime-affecting files changed.\n' "$new_abi"
+            exit 0
+          }
+
+          old_abi="$(git show "$base:nix/tooling.nix" | extract_abi)"
           [ -n "$old_abi" ] && [ -n "$new_abi" ] || {
             echo "Unable to parse host ABI from nix/tooling.nix" >&2
             exit 1
