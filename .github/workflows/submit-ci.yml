@@ -43,9 +43,13 @@ jobs:
             echo "No previous host contract; treating this as initial contract introduction."
             exit 0
           fi
-          if git diff --quiet "$base" "$GITHUB_SHA" -- .inception/host-contract.json; then
+          old_contract="$(git show "$base:.inception/host-contract.json" | jq -S 'del(.host_abi)')"
+          new_contract="$(jq -S 'del(.host_abi)' .inception/host-contract.json)"
+          if [ "$old_contract" = "$new_contract" ]; then
+            echo "Only the minimum required host ABI changed; no capability bump is required."
             exit 0
           fi
+
           old_abi="$(git show "$base:.inception/host-abi" | tr -d '[:space:]')"
           new_abi="$(tr -d '[:space:]' < .inception/host-abi)"
           [[ "$old_abi" =~ ^[0-9]+$ && "$new_abi" =~ ^[0-9]+$ ]] || {
@@ -53,11 +57,11 @@ jobs:
             exit 1
           }
           if [ "$new_abi" -le "$old_abi" ]; then
-            echo "Host contract changed without incrementing .inception/host-abi" >&2
+            echo "Host capability contract changed without incrementing .inception/host-abi" >&2
             echo "old ABI=$old_abi new ABI=$new_abi" >&2
             exit 1
           fi
-          printf 'Host contract ABI bump verified: %s -> %s\n' "$old_abi" "$new_abi"
+          printf 'Host capability contract ABI bump verified: %s -> %s\n' "$old_abi" "$new_abi"
 
       - name: Install Nix for forward-compatible tool checks
         uses: DeterminateSystems/determinate-nix-action@527f17dd63d2d60d3e5552934bc84b9a33a14d11 # v3.22.2
