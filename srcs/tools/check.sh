@@ -81,8 +81,8 @@ grep -Fq 'user default off' srcs/requirements/bonus/redis/tools/entrypoint.sh ||
   fail 'Redis default ACL user must be disabled'
 grep -Fq 'exec gosu redis "$@"' srcs/requirements/bonus/redis/tools/entrypoint.sh ||
   fail 'Redis must drop privileges before daemon start'
-grep -Fq -- '-flushall -flushdb -config -acl -shutdown' srcs/requirements/bonus/redis/tools/entrypoint.sh ||
-  fail 'Redis dangerous-command denylist missing'
+grep -Fq -- '+flushdb -flushall -config -acl -shutdown' srcs/requirements/bonus/redis/tools/entrypoint.sh ||
+  fail 'Redis lifecycle permission or dangerous-command denylist missing'
 
 shell_files=$(find srcs/tools srcs/requirements -name '*.sh')
 for file in $shell_files; do
@@ -101,3 +101,6 @@ if grep -REn --exclude-dir='.git' --exclude-dir='secrets' --exclude='.env' --exc
 fi
 
 printf '%s\n' 'Static configuration checks passed.'
+
+grep -Fq 'Redis did not become reachable' srcs/requirements/wordpress/tools/entrypoint.sh ||
+  fail 'Redis object-cache readiness gate missing'
