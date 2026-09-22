@@ -22,3 +22,5 @@ After importing the appliance, `inception-evaluate --full` is the end-to-end run
 Runtime architecture: x86_64
 Host update path: inception-host-update -> current main#inception-runtime
 Primary project path: clone submit -> make
+
+OVA publication is gated on clone-and-make plus submit/.inception/evaluate full compatibility.
