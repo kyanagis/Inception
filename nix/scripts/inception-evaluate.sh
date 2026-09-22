@@ -35,7 +35,7 @@ while (($#)); do
     --bonus) mode=bonus ;;
     --full) mode=full ;;
     --audit) mode=audit ;;
-    --update-only) mode=update-only ;;
+    --update-only) mode='update-only' ;;
     --no-update) update=0 ;;
     --repo)
       shift
