@@ -16,3 +16,5 @@ test, not a runtime restriction.  Later submit commits are expected to work
 without regenerating the appliance through the .inception/host-tools contract.
 
 Submit-only changes are validated by Submit Compatibility CI and do not, by themselves, require rebuilding this appliance.
+
+After importing the appliance, `inception-evaluate --full` is the end-to-end runtime compatibility check for the current submit branch.
