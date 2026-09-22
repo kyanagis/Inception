@@ -1,0 +1,14 @@
+# Runtime tools that the published OVA may materialize with Nix without
+# rebuilding the appliance. Keep one nixpkgs attribute per line.
+coreutils
+curl
+findutils
+gawk
+gnugrep
+gnumake
+gnused
+iproute2
+jq
+openssl
+python3
+util-linux
