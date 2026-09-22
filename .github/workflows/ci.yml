@@ -14,7 +14,7 @@ concurrency:
   cancel-in-progress: true
 
 permissions:
-  contents: write
+  contents: read
 
 jobs:
   check:
@@ -29,45 +29,3 @@ jobs:
         uses: DeterminateSystems/determinate-nix-action@527f17dd63d2d60d3e5552934bc84b9a33a14d11
       - name: Check NixOS and universal tooling contract
         run: nix flake check path:. -L --show-trace
-
-  cleanup-stale-branches:
-    if: github.event_name == 'push' && github.ref == 'refs/heads/main'
-    runs-on: ubuntu-24.04
-    timeout-minutes: 10
-    env:
-      GH_TOKEN: ${{ github.token }}
-      GH_REPO: ${{ github.repository }}
-    steps:
-      - name: Delete superseded branches
-        shell: bash
-        run: |
-          set -euo pipefail
-          branches=(
-            'backup/main-before-bootstrap-x86-20260922'
-            'backup/main-before-universal-finalize-20260922'
-            'backup/main-before-universal-ova-20260922'
-            'backup/submit-before-bootstrap-x86-20260922'
-            'backup/submit-before-universal-ova-20260922'
-            'feat/container'
-            'fix/offline-wordpress-integrity-20260922'
-            'fix/ova-release-validation'
-            'fix/submit-ci-diagnostics-20260922'
-            'fix/wordpress-permission-transition-20260922'
-            'inception-ova'
-            'release-anchor/v2026.09.22-ova.2'
-            'release-anchor-main/v2026.09.22-ova.2'
-            'work/bootstrap-x86-main-20260922'
-            'work/bootstrap-x86-submit-20260922'
-            'work/submit-ova-contract-20260922'
-            'work/universal-ova-20260922'
-            'work/universal-ova-finalize-20260922'
-            'work/universal-ova-v2-20260922'
-          )
-          for branch in "${branches[@]}"; do
-            if gh api "repos/$GH_REPO/git/ref/heads/$branch" >/dev/null 2>&1; then
-              echo "Deleting $branch"
-              gh api --method DELETE "repos/$GH_REPO/git/refs/heads/$branch"
-            else
-              echo "Already absent: $branch"
-            fi
-          done
