@@ -41,7 +41,16 @@ printf '%s\n' "$static_port" | grep -Fx '127.0.0.1:8081' >/dev/null || fail 'Sta
 curl --fail --silent --show-error http://127.0.0.1:8080/ >/dev/null
 curl --fail --silent --show-error http://127.0.0.1:8081/ >/dev/null
 $compose exec -T redis /usr/local/bin/redis-healthcheck
-$compose exec -T --user www-data wordpress wp redis status --path=/var/www/html >/dev/null
+$compose exec -T wordpress sh -ec '
+  plugin=/var/www/html/wp-content/plugins/redis-cache
+  test "$(stat -c %U:%G "$plugin")" = root:www-data
+  runuser -u www-data -- test -r "$plugin/redis-cache.php"
+  runuser -u www-data -- test -x "$plugin"
+'
+$compose exec -T --user www-data wordpress wp plugin is-active redis-cache --path=/var/www/html >/dev/null ||
+  fail 'Redis Cache plugin is not active after bonus convergence'
+$compose exec -T --user www-data wordpress wp redis status --path=/var/www/html >/dev/null ||
+  fail 'Redis WP-CLI command is unavailable after bonus hardening'
 
 # Prove explicit FTPS negotiates TLS with the generated certificate.
 timeout 15 openssl s_client -starttls ftp   -connect "127.0.0.1:$FTP_PORT"   -servername "$DOMAIN_NAME"   -verify_hostname "$DOMAIN_NAME"   -verify_return_error   -CAfile secrets/ftps_certificate.pem </dev/null >/dev/null 2>&1 ||
