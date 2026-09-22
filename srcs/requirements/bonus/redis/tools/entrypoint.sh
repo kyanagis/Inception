@@ -29,7 +29,7 @@ chmod 0700 /run/redis
 chown redis:redis /run/redis
 printf '%s\n' \
   'user default off' \
-  "user wordpress on >$password ~* +@read +@write +@connection +@scripting +ping +info -flushall -flushdb -config -acl -shutdown -module -replicaof -slaveof -save -bgsave" \
+  "user wordpress on >$password ~* +@read +@write +@connection +@scripting +ping +info +flushdb -flushall -config -acl -shutdown -module -replicaof -slaveof -save -bgsave" \
   > /run/redis/users.acl
 chmod 0400 /run/redis/users.acl
 chown redis:redis /run/redis/users.acl
