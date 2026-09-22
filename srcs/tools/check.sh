@@ -113,3 +113,5 @@ grep -Fq 'chown -R www-data:www-data "$redis_plugin"' srcs/requirements/wordpres
 if grep -Fq 'chmod 0755 /run/php' srcs/requirements/wordpress/tools/entrypoint.sh; then
   fail 'WordPress must rely on the declared tmpfs mode without CAP_FOWNER'
 fi
+grep -Fq 'find "$redis_plugin" -xdev -exec chown root:www-data {} +' srcs/requirements/wordpress/tools/entrypoint.sh ||
+  fail 'Redis plugin ownership is not restored after its scoped writable transition'

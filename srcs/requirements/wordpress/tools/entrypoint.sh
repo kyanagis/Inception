@@ -146,8 +146,21 @@ if [ ! -f "$state/complete" ]; then
     mv "$state/complete.tmp" "$state/complete"
 fi
 mkdir -p "$html/wp-content/uploads"
-find "$html" -xdev -type d -exec chown root:www-data {} + -exec chmod 0755 {} +
-find "$html" -xdev -type f -exec chown root:www-data {} + -exec chmod 0644 {} +
+# redis-cache and its drop-in were deliberately writable by www-data for the
+# preceding wp CLI operation.  Return their ownership without a subsequent
+# chmod: after a CHOWN operation the restricted container lacks CAP_FOWNER,
+# and Docker's NixOS tmpfs/user-namespace setup rejects that redundant chmod.
+# Their modes are already constrained by the bundled plugin and wp CLI.
+redis_dropin="$html/wp-content/object-cache.php"
+find "$redis_plugin" -xdev -exec chown root:www-data {} +
+if [ -e "$redis_dropin" ] || [ -L "$redis_dropin" ]; then
+    [ -f "$redis_dropin" ] && [ ! -L "$redis_dropin" ] || fail "Unsafe Redis object-cache drop-in"
+    chown root:www-data "$redis_dropin"
+fi
+find "$html" -xdev \( -path "$redis_plugin" -o -path "$redis_dropin" \) -prune -o \
+    -type d -exec chown root:www-data {} + -exec chmod 0755 {} +
+find "$html" -xdev \( -path "$redis_plugin" -o -path "$redis_dropin" \) -prune -o \
+    -type f -exec chown root:www-data {} + -exec chmod 0644 {} +
 # Apply mode while files are still root-owned, then hand ownership to
 # www-data. The container deliberately lacks CAP_FOWNER, so chmod after chown
 # would fail once the entrypoint no longer owns these paths.
