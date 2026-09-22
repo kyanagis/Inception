@@ -21,24 +21,26 @@ make configure LOGIN="$login"
 make doctor
 make check
 
+# The smoke-test targets own their service-mode transition:
+#   make test       -> prerequisite up
+#   make bonus-test -> prerequisite bonus
+# Keep this ABI at one transition per mode.  Calling up/bonus here as well
+# creates a second Compose reconciliation, which can recreate only a subset of
+# bonus services and leave WordPress plugin state out of sync with Redis.
 case "$mode" in
   prepare)
     ;;
   mandatory)
-    make up
     make test
     make audit
     ;;
   bonus)
-    make bonus
     make bonus-test
     make audit
     ;;
   full)
-    make up
     make test
     make audit
-    make bonus
     make bonus-test
     make audit
     ;;
