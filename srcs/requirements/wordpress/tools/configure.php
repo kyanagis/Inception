@@ -25,8 +25,7 @@ foreach (['AUTH_KEY', 'SECURE_AUTH_KEY', 'LOGGED_IN_KEY', 'NONCE_KEY', 'AUTH_SAL
 }
 echo <<<'CONFIG'
 define('DB_PASSWORD', trim(file_get_contents('/run/php/db_password')));
-define('WP_REDIS_PASSWORD', trim(file_get_contents('/run/php/redis_password')));
-define('WP_REDIS_USERNAME', 'wordpress');
+define('WP_REDIS_PASSWORD', ['wordpress', trim(file_get_contents('/run/php/redis_password'))]);
 define('WP_REDIS_DISABLED', getenv('WP_REDIS_DISABLED') !== '0');
 $table_prefix = 'wp_';
 if (!defined('ABSPATH')) {
