@@ -1,0 +1,79 @@
+name: Released OVA Import Smoke
+
+on:
+  workflow_dispatch:
+  push:
+    branches:
+      - main
+    paths:
+      - ".github/workflows/ova-release-smoke.yml"
+
+concurrency:
+  group: released-ova-import-smoke
+  cancel-in-progress: true
+
+permissions:
+  contents: read
+
+jobs:
+  import:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 90
+    steps:
+      - name: Install Nix
+        uses: DeterminateSystems/determinate-nix-action@527f17dd63d2d60d3e5552934bc84b9a33a14d11
+
+      - name: Download published ova-latest assets
+        shell: bash
+        env:
+          GH_TOKEN: ${{ github.token }}
+          GH_REPO: ${{ github.repository }}
+        run: |
+          set -euo pipefail
+          mkdir release-assets
+          gh release download ova-latest --repo "$GH_REPO" --dir release-assets             --pattern 'inception.ova.part-*'             --pattern 'SHA256SUMS'             --pattern 'BUILD-PROVENANCE.txt'             --pattern 'OVA-CAPABILITIES.txt'
+          test -s release-assets/inception.ova.part-00
+          test -s release-assets/inception.ova.part-01
+          test -s release-assets/SHA256SUMS
+
+      - name: Reassemble and verify published OVA
+        shell: bash
+        working-directory: release-assets
+        run: |
+          set -euo pipefail
+          cat inception.ova.part-* > inception.ova
+          expected="$(awk '$2 == "inception.ova" {print $1}' SHA256SUMS)"
+          test -n "$expected"
+          actual="$(sha256sum inception.ova | awk '{print $1}')"
+          test "$actual" = "$expected"
+          sha256sum --check --ignore-missing SHA256SUMS
+
+      - name: Import published OVA into VirtualBox registry
+        shell: bash
+        run: |
+          set -euo pipefail
+          export HOME="$RUNNER_TEMP/vbox-home"
+          mkdir -p "$HOME"
+          nix shell nixpkgs#virtualbox --command bash -euo pipefail -c '
+            vm="InceptionReleaseSmoke"
+            cleanup() {
+              VBoxManage unregistervm "$vm" --delete >/dev/null 2>&1 || true
+            }
+            trap cleanup EXIT
+            VBoxManage import release-assets/inception.ova --vsys 0 --vmname "$vm"
+            VBoxManage showvminfo "$vm" --machinereadable > release-assets/VBOX-IMPORT.txt
+            grep -Fq "name=\"$vm\"" release-assets/VBOX-IMPORT.txt
+            grep -Eq "^memory=4096$" release-assets/VBOX-IMPORT.txt
+            grep -Eq "^cpus=4$" release-assets/VBOX-IMPORT.txt
+          '
+
+      - name: Publish import evidence
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a
+        with:
+          name: ova-release-import-evidence
+          path: |
+            release-assets/BUILD-PROVENANCE.txt
+            release-assets/OVA-CAPABILITIES.txt
+            release-assets/VBOX-IMPORT.txt
+          if-no-files-found: error
+          retention-days: 30
