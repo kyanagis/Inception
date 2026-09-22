@@ -370,6 +370,19 @@ in
     '';
   };
 
+  system.activationScripts.inception-login-state = lib.stringAfter [ "etc" ] ''
+    if [ -s ${loginStateDirectory}/login ]; then
+      login="$(cat ${loginStateDirectory}/login)"
+      case "$login" in
+        ''|[!a-z]*|*[!a-z0-9-]*|*-|root|inception)
+          echo "Invalid persisted Inception login: $login" >&2
+          exit 1
+          ;;
+      esac
+      printf '%s\n' "$login.42.fr" > /proc/sys/kernel/hostname
+    fi
+  '';
+
   systemd = {
     services.inception-docker-data-link = {
       description = "Prepare the initial Docker data-root indirection";
