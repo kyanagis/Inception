@@ -6,6 +6,12 @@ fail() {
   exit 1
 }
 
+# Nix store binaries cannot be setuid.  Do not rely on PATH here: the
+# writeShellApplication runtime-input PATH contains a store copy of sudo
+# before /run/wrappers/bin.  The NixOS wrapper is the privileged interface.
+sudo_wrapper=/run/wrappers/bin/sudo
+[[ -x "$sudo_wrapper" ]] || fail 'NixOS sudo wrapper is unavailable'
+
 required_abi=
 case "${1:-}" in
   --ensure)
@@ -56,11 +62,11 @@ printf 'Host source commit: %s\n' "$sha"
 
 nix --extra-experimental-features 'nix-command flakes'   build --no-link "path:$work/source#nixosConfigurations.inception-runtime.config.system.build.toplevel"
 
-sudo -v
+"$sudo_wrapper" -v
 old_system=$(readlink -f /run/current-system)
-if ! sudo /run/current-system/sw/bin/nixos-rebuild switch     --flake "path:$work/source#inception-runtime"; then
+if ! "$sudo_wrapper" /run/current-system/sw/bin/nixos-rebuild switch     --flake "path:$work/source#inception-runtime"; then
   printf 'Host activation failed; attempting rollback to %s\n' "$old_system" >&2
-  sudo "$old_system/bin/switch-to-configuration" switch || true
+  "$sudo_wrapper" "$old_system/bin/switch-to-configuration" switch || true
   exit 1
 fi
 
@@ -71,10 +77,10 @@ fi
 [[ "$new_abi" =~ ^[0-9]+$ ]] || fail 'updated host has an invalid ABI marker'
 if [[ -n "$required_abi" && "$new_abi" -lt "$required_abi" ]]; then
   printf 'Updated main provides host ABI %s, but submit requires %s. Rolling back.\n' "$new_abi" "$required_abi" >&2
-  sudo "$old_system/bin/switch-to-configuration" switch || true
+  "$sudo_wrapper" "$old_system/bin/switch-to-configuration" switch || true
   exit 1
 fi
 
-printf '%s\n' "$sha" | sudo tee /var/lib/inception/host-version >/dev/null
-sudo chmod 0644 /var/lib/inception/host-version
+printf '%s\n' "$sha" | "$sudo_wrapper" tee /var/lib/inception/host-version >/dev/null
+"$sudo_wrapper" chmod 0644 /var/lib/inception/host-version
 printf 'Host update complete: ABI %s, commit %s\n' "$new_abi" "$sha"

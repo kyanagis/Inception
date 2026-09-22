@@ -28,7 +28,6 @@ let
       git
       gnugrep
       nix
-      sudo
     ];
     text = builtins.readFile ./scripts/inception-host-update.sh;
   };

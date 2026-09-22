@@ -112,7 +112,6 @@ let
     name = "inception-setup";
     runtimeInputs = with pkgs; [
       kdePackages.kdialog
-      sudo
     ];
     text = ''
             first_login=0
@@ -144,7 +143,11 @@ let
               exit 0
             fi
 
-            if output="$(sudo ${applyLogin}/bin/inception-apply-login "$login" 2>&1)"; then
+            # Nix store binaries cannot be setuid.  Use the NixOS runtime
+            # wrapper explicitly: writeShellApplication places runtimeInputs
+            # before /run/wrappers/bin in PATH, so an unqualified sudo here
+            # would otherwise select the non-setuid store binary.
+            if output="$(/run/wrappers/bin/sudo ${applyLogin}/bin/inception-apply-login "$login" 2>&1)"; then
               if [ "$graphical" -eq 1 ]; then
                 kdialog --title 'Inception VM setup' --msgbox "$output
 
