@@ -88,14 +88,12 @@ if [ ! -e "$html" ]; then
 fi
 [ -d "$html" ] && [ -f "$html/wp-includes/version.php" ] || fail "Invalid committed WordPress files"
 [ ! -L "$html/wp-config.php" ] || fail "Symlink WordPress configuration rejected"
-if [ ! -f "$html/wp-config.php" ]; then
-    config=$(mktemp "$html/.wp-config.XXXXXX")
-    php /usr/local/lib/inception/configure.php > "$config"
-    php -l "$config" >/dev/null || fail "Invalid generated WordPress configuration"
-    chmod 0640 "$config"
-    chown www-data:www-data "$config"
-    mv -T "$config" "$html/wp-config.php"
-fi
+config=$(mktemp "$html/.wp-config.XXXXXX")
+php /usr/local/lib/inception/configure.php > "$config"
+php -l "$config" >/dev/null || fail "Invalid generated WordPress configuration"
+chmod 0640 "$config"
+chown www-data:www-data "$config"
+mv -T "$config" "$html/wp-config.php"
 as_wp() { runuser -u www-data -- wp --path="$html" "$@"; }
 if ! as_wp core is-installed >/dev/null 2>&1; then
     tables=$(mariadb --defaults-file=/run/php/app-client.cnf --batch --skip-column-names -e 'SHOW TABLES') || fail "Unable to inspect existing WordPress schema"
