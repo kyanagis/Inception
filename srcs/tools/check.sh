@@ -106,3 +106,7 @@ printf '%s\n' 'Static configuration checks passed.'
 
 grep -Fq 'Redis did not become reachable' srcs/requirements/wordpress/tools/entrypoint.sh ||
   fail 'Redis object-cache readiness gate missing'
+grep -Fq 'chown www-data:www-data "$html/wp-content"' srcs/requirements/wordpress/tools/entrypoint.sh ||
+  fail 'Redis object-cache lifecycle lacks its scoped writable wp-content transition'
+grep -Fq 'chown -R www-data:www-data "$redis_plugin"' srcs/requirements/wordpress/tools/entrypoint.sh ||
+  fail 'Redis plugin lifecycle lacks its scoped writable transition'

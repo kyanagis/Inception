@@ -110,6 +110,14 @@ if ! as_wp user get "$WP_USER" --field=ID >/dev/null 2>&1; then
 fi
 as_wp eval-file /usr/local/lib/inception/check-account.php "$WP_USER" author /run/php/wp-user-password >/dev/null
 chown -R www-data:www-data "$html/wp-content"
+redis_plugin="$html/wp-content/plugins/redis-cache"
+# The Redis object-cache CLI creates/removes wp-content/object-cache.php and
+# may normalize its bundled plugin files.  Previous boots deliberately return
+# wp-content to root ownership below, so grant www-data access only for these
+# controlled CLI operations and restore the immutable policy afterwards.
+[ -d "$redis_plugin" ] && [ ! -L "$redis_plugin" ] || fail "Redis plugin directory is missing or unsafe"
+chown www-data:www-data "$html/wp-content"
+chown -R www-data:www-data "$redis_plugin"
 if [ "$WP_REDIS_DISABLED" = 0 ]; then
     redis_ready=0
     for attempt in $(seq 1 60); do
@@ -120,7 +128,8 @@ if [ "$WP_REDIS_DISABLED" = 0 ]; then
         sleep 1
     done
     [ "$redis_ready" = 1 ] || fail "Redis did not become reachable"
-    as_wp plugin activate redis-cache >/dev/null
+    as_wp plugin is-active redis-cache >/dev/null 2>&1 ||
+        as_wp plugin activate redis-cache >/dev/null
     as_wp redis enable >/dev/null || fail "Redis object-cache enable failed"
     as_wp redis status >/dev/null || fail "Redis object-cache status failed"
 else
