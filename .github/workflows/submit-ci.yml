@@ -65,14 +65,15 @@ jobs:
           test "$(docker info --format '{{.DockerRootDir}}')" = /home/runner/data/docker
           printf '127.0.0.1 runner.42.fr\n' | sudo tee -a /etc/hosts >/dev/null
 
-      - name: Static, host, mandatory and adversarial checks
+      - name: Clone-equivalent mandatory path
         shell: bash
+        env:
+          INCEPTION_LOGIN: runner
         run: |
           set -euo pipefail
-          make configure LOGIN=runner
-          make doctor
-          make check
-          make up
+          test ! -e srcs/.env
+          make
+          test -f srcs/.env
           make test
           make audit
           site_before="$(docker compose --env-file srcs/.env -f srcs/docker-compose.yml exec -T --user www-data wordpress wp option get siteurl --path=/var/www/html)"
@@ -80,13 +81,13 @@ jobs:
           site_after="$(docker compose --env-file srcs/.env -f srcs/docker-compose.yml exec -T --user www-data wordpress wp option get siteurl --path=/var/www/html)"
           test "$site_before" = "$site_after"
 
-      - name: Bonus integration checks
+      - name: Stable submit evaluation ABI
         shell: bash
+        env:
+          INCEPTION_LOGIN: runner
         run: |
           set -euo pipefail
-          make bonus
-          make bonus-test
-          make audit
+          sh ./.inception/evaluate full
 
       - name: Evidence
         if: always()
