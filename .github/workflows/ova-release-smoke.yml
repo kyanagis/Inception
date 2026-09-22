@@ -67,16 +67,19 @@ jobs:
           test "$actual" = "$expected"
           sha256sum --check --ignore-missing SHA256SUMS
 
-      - name: Import published OVA into VirtualBox registry
+      - name: Import published OVA and boot its disk
         shell: bash
         run: |
           set -euo pipefail
           export HOME="$RUNNER_TEMP/vbox-home"
           mkdir -p "$HOME"
-          nix shell nixpkgs#virtualbox nixpkgs#openssh --command bash -euo pipefail -c '
+
+          # First prove the released appliance imports as an actual VirtualBox
+          # appliance. GitHub-hosted runners do not provide vboxdrv, so boot the
+          # exact released VMDK with their available KVM accelerator afterwards.
+          nix shell nixpkgs#virtualbox --command bash -euo pipefail -c '
             vm="InceptionReleaseSmoke"
             cleanup() {
-              VBoxManage controlvm "$vm" poweroff >/dev/null 2>&1 || true
               VBoxManage unregistervm "$vm" --delete >/dev/null 2>&1 || true
             }
             trap cleanup EXIT
@@ -85,22 +88,48 @@ jobs:
             grep -Fq "name=\"$vm\"" release-assets/VBOX-IMPORT.txt
             grep -Eq "^memory=4096$" release-assets/VBOX-IMPORT.txt
             grep -Eq "^cpus=4$" release-assets/VBOX-IMPORT.txt
+          '
 
-            VBoxManage modifyvm "$vm" --natpf1 "ssh,tcp,127.0.0.1,2222,,22"
-            VBoxManage startvm "$vm" --type headless
+          mkdir -p release-assets/boot-disk
+          tar -xf release-assets/inception.ova -C release-assets/boot-disk
+          disk="$(find release-assets/boot-disk -maxdepth 1 -type f -name '*.vmdk' -print -quit)"
+          test -n "$disk"
+
+          nix shell nixpkgs#qemu nixpkgs#openssh --command bash -euo pipefail -c '
+            disk="$1"
+            pidfile="$RUNNER_TEMP/inception-qemu.pid"
+            serial="$GITHUB_WORKSPACE/release-assets/QEMU-SERIAL.txt"
+            cleanup() {
+              if [ -s "$pidfile" ]; then
+                kill "$(cat "$pidfile")" >/dev/null 2>&1 || true
+                for _ in $(seq 1 30); do
+                  kill -0 "$(cat "$pidfile")" >/dev/null 2>&1 || break
+                  sleep 1
+                done
+                kill -9 "$(cat "$pidfile")" >/dev/null 2>&1 || true
+              fi
+            }
+            trap cleanup EXIT
+
+            qemu-system-x86_64               -enable-kvm               -machine q35,accel=kvm               -cpu host               -m 4096               -smp 4               -drive "file=$disk,format=vmdk,if=virtio"               -nic user,model=virtio-net-pci,hostfwd=tcp:127.0.0.1:2222-:22               -display none               -serial "file:$serial"               -daemonize               -pidfile "$pidfile"
+
             booted=0
             for attempt in $(seq 1 180); do
-              if ssh-keyscan -T 2 -p 2222 127.0.0.1 > release-assets/SSH-HOSTKEYS.txt 2>/dev/null &&
-                 test -s release-assets/SSH-HOSTKEYS.txt; then
+              if ssh-keyscan -T 2 -p 2222 127.0.0.1 > "$GITHUB_WORKSPACE/release-assets/SSH-HOSTKEYS.txt" 2>/dev/null &&
+                 test -s "$GITHUB_WORKSPACE/release-assets/SSH-HOSTKEYS.txt"; then
                 booted=1
                 break
               fi
+              kill -0 "$(cat "$pidfile")" >/dev/null 2>&1 || {
+                echo "QEMU exited before sshd became reachable" >&2
+                cat "$serial" >&2 || true
+                exit 1
+              }
               sleep 1
             done
             test "$booted" -eq 1
-            VBoxManage showvminfo "$vm" --machinereadable > release-assets/VBOX-BOOTED.txt
-            grep -Eq "^VMState=\"running\"$" release-assets/VBOX-BOOTED.txt
-          '
+            printf "Published OVA booted to sshd through KVM.\n" | tee "$GITHUB_WORKSPACE/release-assets/QEMU-BOOT.txt"
+          ' bash "$disk"
 
       - name: Publish import evidence
         uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a
@@ -110,7 +139,8 @@ jobs:
             release-assets/BUILD-PROVENANCE.txt
             release-assets/OVA-CAPABILITIES.txt
             release-assets/VBOX-IMPORT.txt
-            release-assets/VBOX-BOOTED.txt
+            release-assets/QEMU-BOOT.txt
+            release-assets/QEMU-SERIAL.txt
             release-assets/SSH-HOSTKEYS.txt
           if-no-files-found: error
           retention-days: 30
