@@ -92,8 +92,18 @@ jobs:
 
           mkdir -p release-assets/boot-disk
           tar -xf release-assets/inception.ova -C release-assets/boot-disk
-          disk="$(find release-assets/boot-disk -maxdepth 1 -type f -name '*.vmdk' -print -quit)"
-          test -n "$disk"
+          source_disk="$(find release-assets/boot-disk -maxdepth 1 -type f -name '*.vmdk' -print -quit)"
+          test -n "$source_disk"
+
+          # VirtualBox exports a streamOptimized VMDK. QEMU can read that format
+          # but it is not suitable as a writable root filesystem: ext4 journal
+          # updates fail with I/O errors. Convert the exact released disk content
+          # to a writable QCOW2 solely for the cross-hypervisor boot probe.
+          disk="$GITHUB_WORKSPACE/release-assets/boot-disk/inception-boot.qcow2"
+          nix shell nixpkgs#qemu --command qemu-img convert -f vmdk -O qcow2 "$source_disk" "$disk"
+          qemu-img_info="$(nix shell nixpkgs#qemu --command qemu-img info --output=json "$disk")"
+          printf '%s\n' "$qemu-img_info" > release-assets/QEMU-DISK.json
+          jq -e '.format == "qcow2"' release-assets/QEMU-DISK.json >/dev/null
 
           nix shell nixpkgs#qemu nixpkgs#openssh nixpkgs#socat --command bash -euo pipefail -c '
             disk="$1"
@@ -132,7 +142,7 @@ jobs:
               -m 4096 \
               -smp 4 \
               -device ich9-ahci,id=sata \
-              -drive "file=$disk,format=vmdk,if=none,id=osdisk,cache=none" \
+              -drive "file=$disk,format=qcow2,if=none,id=osdisk,cache=none" \
               -device ide-hd,drive=osdisk,bus=sata.0 \
               -netdev user,id=net0,hostfwd=tcp:127.0.0.1:2222-:22 \
               -device virtio-net-pci,netdev=net0 \
@@ -181,6 +191,7 @@ jobs:
             release-assets/QEMU-BOOT.txt
             release-assets/QEMU-SERIAL.txt
             release-assets/QEMU-MONITOR.txt
+            release-assets/QEMU-DISK.json
             release-assets/QEMU-SCREEN.ppm
             release-assets/SSH-HOSTKEYS.txt
           if-no-files-found: warn
