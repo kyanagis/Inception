@@ -126,8 +126,11 @@ fi
 mkdir -p "$html/wp-content/uploads"
 find "$html" -xdev -type d -exec chown root:www-data {} + -exec chmod 0755 {} +
 find "$html" -xdev -type f -exec chown root:www-data {} + -exec chmod 0644 {} +
-find "$html/wp-content/uploads" -xdev -type d -exec chown www-data:www-data {} + -exec chmod 0755 {} +
-find "$html/wp-content/uploads" -xdev -type f -exec chown www-data:www-data {} + -exec chmod 0644 {} +
+# Apply mode while files are still root-owned, then hand ownership to
+# www-data. The container deliberately lacks CAP_FOWNER, so chmod after chown
+# would fail once the entrypoint no longer owns these paths.
+find "$html/wp-content/uploads" -xdev -type d -exec chmod 0755 {} + -exec chown www-data:www-data {} +
+find "$html/wp-content/uploads" -xdev -type f -exec chmod 0644 {} + -exec chown www-data:www-data {} +
 chown root:www-data "$html/wp-config.php"
 chmod 0640 "$html/wp-config.php"
 cleanup
