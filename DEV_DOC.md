@@ -43,6 +43,7 @@ inception-evaluateは次を行います。
 3. 既存checkoutをorigin/submitへresetし、secrets/とgenerated srcs/.env以外の
    stale untracked stateを除去する。
 4. .inception/host-abiを読み、必要ならinception-host-updateでNixOS runtimeを更新する。
+5. .inception/host-contract.json で architecture、Docker/Compose最低version、公開TCP port/range、loopback-only portを宣言する。
 5. .inception/host-toolsを安全なidentifier pairとして検証する。
 6. OVAに不足commandがあれば対応するnixpkgs packageをephemeral shellへ追加する。
 7. project固有処理を submit/.inception/evaluate へ委譲する。
@@ -287,3 +288,11 @@ OVA CIは次を別々に通す必要があります。
 9. split artifact recombination hash validation
 
 submitが変わってもOVA image sourceが変わらない限り、既存OVAは利用できます。CIはsubmit compatibilityを継続監視し、互換性が壊れた場合に「OVAを作り直す」のではなく、まずsubmit側contractまたはephemeral dependency宣言で解決できるかを判定します。
+
+host-level requirementを変更する場合のルール:
+- .inception/host-contract.json を変更する。
+- .inception/host-abi を必ず増加させる。
+- main側の同じABIでNixOS runtime capabilityを実装する。
+- Submit Compatibility CIがmain runtimeのarchitecture、Docker/Compose version、firewall port/rangeをnix evalで照合する。
+- mainのruntime-affecting fileを変更する場合もOVA Source CIがhost ABI bumpを要求する。
+- したがって通常のapplication/container変更ではOVA再生成もhost ABI更新も不要。host capability変更時も既存OVAはinception-host-updateで追従する。
