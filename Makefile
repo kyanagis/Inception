@@ -83,11 +83,11 @@ check:
 audit:
 	@sh ./srcs/tools/security-audit.sh
 
-test: setup
+test: up
 	@./srcs/tools/check.sh
 	@./srcs/tools/smoke-test.sh
 
-bonus-test: setup
+bonus-test: bonus
 	@./srcs/tools/check.sh
 	@sh ./srcs/tools/bonus-smoke-test.sh
 
