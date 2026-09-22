@@ -113,8 +113,18 @@ fi
 as_wp eval-file /usr/local/lib/inception/check-account.php "$WP_USER" author /run/php/wp-user-password >/dev/null
 chown -R www-data:www-data "$html/wp-content"
 if [ "$WP_REDIS_DISABLED" = 0 ]; then
+    redis_ready=0
+    for attempt in $(seq 1 60); do
+        if nc -z redis 6379 >/dev/null 2>&1; then
+            redis_ready=1
+            break
+        fi
+        sleep 1
+    done
+    [ "$redis_ready" = 1 ] || fail "Redis did not become reachable"
     as_wp plugin activate redis-cache >/dev/null
-    as_wp redis enable >/dev/null
+    as_wp redis enable >/dev/null || fail "Redis object-cache enable failed"
+    as_wp redis status >/dev/null || fail "Redis object-cache status failed"
 else
     as_wp redis disable >/dev/null 2>&1 || true
 fi
