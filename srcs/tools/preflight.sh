@@ -2,14 +2,26 @@
 set -eu
 
 fail() { printf 'Preflight: %s\n' "$*" >&2; exit 1; }
-for tool in docker jq realpath stat ip getent awk grep sort; do
+for tool in docker jq realpath stat ip getent awk grep sort uname; do
   command -v "$tool" >/dev/null 2>&1 || fail "Missing $tool"
 done
 [ -z "${DOCKER_HOST+x}${DOCKER_CONTEXT+x}" ] || fail 'Unset DOCKER_HOST and DOCKER_CONTEXT; only the local rootful daemon is supported'
 [ "$(docker context show)" = default ] || fail 'Select the default Docker context'
 project_dir=$(CDPATH='' cd -- "$(dirname -- "$0")/../.." && pwd)
 env_file=$project_dir/srcs/.env
+contract_file=$project_dir/.inception/host-contract.json
+abi_file=$project_dir/.inception/host-abi
 [ -f "$env_file" ] && [ ! -L "$env_file" ] || fail 'Expected a regular srcs/.env'
+[ -f "$contract_file" ] && [ ! -L "$contract_file" ] || fail 'Expected .inception/host-contract.json'
+[ -f "$abi_file" ] && [ ! -L "$abi_file" ] || fail 'Expected .inception/host-abi'
+required_abi=$(tr -d '[:space:]' < "$abi_file")
+contract_abi=$(jq -er '.host_abi' "$contract_file")
+architecture=$(jq -er '.architecture' "$contract_file")
+engine_min=$(jq -er '.docker_engine_min' "$contract_file")
+compose_min=$(jq -er '.docker_compose_min' "$contract_file")
+case "$required_abi:$contract_abi" in *[!0-9:]*) fail 'Invalid host ABI contract';; esac
+[ "$required_abi" = "$contract_abi" ] || fail '.inception/host-abi differs from host-contract.json'
+[ "$(uname -m)" = "$architecture" ] || fail "Host architecture must be $architecture"
 domain=$(sed -n 's/^DOMAIN_NAME=//p' "$env_file")
 data_path=$(sed -n 's/^DATA_PATH=//p' "$env_file")
 case "$domain" in *.42.fr) login=${domain%.42.fr} ;; *) fail 'DOMAIN_NAME must be LOGIN.42.fr' ;; esac
@@ -25,8 +37,8 @@ docker_root=$(printf '%s' "$info" | jq -r .DockerRootDir)
 [ "$(realpath -m -- "$docker_root")" = "$data_path/docker" ] || fail "Docker data-root must resolve to $data_path/docker; use inception-setup $login in the OVA or make host-setup LOGIN=$login in a dedicated Debian VM"
 engine_version=$(docker_local version --format '{{.Server.Version}}')
 compose_version=$(docker_local compose version --short)
-[ "$(printf '%s\n' 27.0.3 "$engine_version" | sort -V | head -n 1)" = 27.0.3 ] || fail 'Docker Engine >=27.0.3 is required'
-[ "$(printf '%s\n' 2.38.2 "${compose_version#v}" | sort -V | head -n 1)" = 2.38.2 ] || fail 'Docker Compose >=2.38.2 is required'
+[ "$(printf '%s\n' "$engine_min" "$engine_version" | sort -V | head -n 1)" = "$engine_min" ] || fail "Docker Engine >=$engine_min is required"
+[ "$(printf '%s\n' "$compose_min" "${compose_version#v}" | sort -V | head -n 1)" = "$compose_min" ] || fail "Docker Compose >=$compose_min is required"
 
 existing_volumes=$(docker_local volume ls --format '{{.Name}}') || fail 'Docker volume query failed'
 for logical in mariadb_data wordpress_data backup_data; do
