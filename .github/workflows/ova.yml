@@ -69,25 +69,26 @@ jobs:
           done
           test "$(docker info --format '{{.DockerRootDir}}')" = /home/runner/data/docker
           printf '127.0.0.1 runner.42.fr\n' | sudo tee -a /etc/hosts >/dev/null
-      - name: Validate current submit mandatory stack
+      - name: Validate current submit clone-and-make contract
         shell: bash
         working-directory: submit
+        env:
+          INCEPTION_LOGIN: runner
         run: |
           set -euo pipefail
-          make configure LOGIN=runner
-          make doctor
-          make check
-          make up
+          test ! -e srcs/.env
+          make
+          test -f srcs/.env
           make test
           make audit
-      - name: Validate current submit bonus stack
+      - name: Validate current submit stable evaluation ABI
         shell: bash
         working-directory: submit
+        env:
+          INCEPTION_LOGIN: runner
         run: |
           set -euo pipefail
-          make bonus
-          make bonus-test
-          make audit
+          sh ./.inception/evaluate full
       - name: Capture service evidence
         if: always()
         shell: bash
@@ -188,8 +189,11 @@ jobs:
             echo "Runner OS: $(. /etc/os-release && echo "$PRETTY_NAME")"
           } > BUILD-PROVENANCE.txt
           cat > OVA-CAPABILITIES.txt <<'EOF'
-          Universal Inception OVA
+          Universal Inception x86_64 OVA
+          - import once into VirtualBox; ordinary submit changes do not require re-export
+          - clone current submit and run make; runtime env is generated automatically
           - submit source is fetched at runtime and is not baked into the image
+          - inception-host-update: self-update the NixOS guest from current main
           - inception-evaluate: update/prepare/mandatory/bonus/full/audit modes
           - inception-audit: host and repository hypothesis-driven audit
           - Docker + Compose
@@ -263,7 +267,8 @@ jobs:
           $(cat release-assets/BUILD-PROVENANCE.txt)
 
           The appliance intentionally does not pin or contain the assessed submit source.
-          Run inception-setup once, then inception-evaluate --prepare or --full.
+          Run inception-setup once, then clone submit and run make.
+          The appliance can also self-update its host runtime with inception-host-update.
           Future ordinary submit changes are consumed at runtime; missing declared userspace
           tools can be supplied by the safe .inception/host-tools Nix fallback.
 
