@@ -254,6 +254,7 @@ services:
       - "127.0.0.1:8080:8080"
     networks:
       - backend
+      - adminer_access
     depends_on:
       mariadb:
         condition: service_healthy
@@ -321,6 +322,9 @@ networks:
     internal: true
   edge:
     name: inception_edge
+    driver: bridge
+  adminer_access:
+    name: inception_adminer_access
     driver: bridge
 
 volumes:
