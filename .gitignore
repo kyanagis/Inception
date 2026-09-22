@@ -9,3 +9,4 @@ secrets/*
 *.swo
 .idea/
 .vscode/
+srcs/.env
