@@ -93,3 +93,5 @@ OVAにない通常のuserspace commandは対応するnixpkgs packageをephemeral
     ssh-setup --status
 
 Desktop/TROUBLESHOOTING-QA.txtも参照してください。
+
+submit-onlyの変更はSubmit Compatibility CIで検証され、通常はOVAの再生成を必要としません。
