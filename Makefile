@@ -10,29 +10,31 @@ all: up
 host-ready:
 	@set -eu; \
 	if command -v inception-host-update >/dev/null 2>&1 && [ -f .inception/host-abi ]; then \
-	  expected=$(tr -d '[:space:]' < .inception/host-abi); \
-	  inception-host-update --ensure "$expected"; \
+	  expected=$$(tr -d '[:space:]' < .inception/host-abi); \
+	  inception-host-update --ensure "$$expected"; \
 	fi
 
 auto-configure: host-ready
 	@set -eu; \
-	login="${LOGIN:-${INCEPTION_LOGIN:-}}"; \
+	login="$${LOGIN:-$${INCEPTION_LOGIN:-}}"; \
+	if [ -z "$$login" ] && [ -r /var/lib/inception/environment ]; then \
+	  set -a; . /var/lib/inception/environment; set +a; login="$$INCEPTION_LOGIN"; \
+	fi; \
 	if [ -f srcs/.env ]; then \
-	  if [ -n "$login" ]; then ./srcs/tools/configure.sh "$login" >/dev/null; fi; \
+	  if [ -n "$$login" ]; then ./srcs/tools/configure.sh "$$login" >/dev/null; fi; \
 	else \
-	  [ -n "$login" ] || { printf '%s\n' 'No runtime login configured. In the published OVA run inception-setup LOGIN once; on Debian use make configure LOGIN=LOGIN.' >&2; exit 2; }; \
-	  ./srcs/tools/configure.sh "$login"; \
+	  [ -n "$$login" ] || { printf '%s\n' 'No runtime login configured. In the published OVA run inception-setup LOGIN once; on Debian use make configure LOGIN=LOGIN.' >&2; exit 2; }; \
+	  ./srcs/tools/configure.sh "$$login"; \
 	fi
 
 host-setup:
 	@./srcs/tools/host-setup.sh "$$LOGIN"
 
 configure:
-	@set -eu; login="${LOGIN:-${INCEPTION_LOGIN:-}}"; [ -n "$login" ] || { printf '%s\n' 'Usage: make configure LOGIN=login' >&2; exit 2; }; ./srcs/tools/configure.sh "$login"
+	@set -eu; login="$${LOGIN:-$${INCEPTION_LOGIN:-}}"; if [ -z "$$login" ] && [ -r /var/lib/inception/environment ]; then set -a; . /var/lib/inception/environment; set +a; login="$$INCEPTION_LOGIN"; fi; [ -n "$$login" ] || { printf '%s\n' 'Usage: make configure LOGIN=login' >&2; exit 2; }; ./srcs/tools/configure.sh "$$login"
 
 preflight: host-ready auto-configure
 	@./srcs/tools/preflight.sh
-
 doctor: preflight
 	@printf '%s\n' 'Host prerequisites and persistent-storage contract are valid.'
 
