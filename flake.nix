@@ -47,6 +47,7 @@
     in
     {
       nixosConfigurations.${hostName} = host;
+      nixosConfigurations.inception-runtime = vbox;
 
       packages.${system} = {
         default = vbox.config.system.build.image;
