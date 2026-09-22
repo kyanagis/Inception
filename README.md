@@ -4,10 +4,14 @@
 
 This branch builds the reusable VirtualBox environment used to evaluate and work on the Inception project.
 
-The appliance deliberately does not contain or pin the assessed source tree. After initial setup it fetches the current `submit` branch at runtime:
+The appliance deliberately does not contain or pin the assessed source tree. The primary workflow is:
 
     inception-setup YOUR_42_LOGIN
-    inception-evaluate --prepare
+    git clone --branch submit --single-branch https://github.com/kyanagis/Inception.git Inception
+    cd Inception
+    make
+
+The clone generates its runtime `srcs/.env` from the OVA identity and verifies the appliance host ABI automatically.
 
 For a complete mandatory and bonus validation:
 
@@ -15,7 +19,7 @@ For a complete mandatory and bonus validation:
 
 The OVA contains Docker/Compose, Nix, jq, Python, C/C++ build tools, GDB, strace, shellcheck, nmap, tcpdump, socat, Git, ripgrep, rsync, tmux, Firefox, VSCodium, Meld, Kitty, Vim, and the `inception-audit` hypothesis-driven diagnostic runner.
 
-Ordinary future changes to the `submit` branch do not require rebuilding the appliance. The evaluator fast-forwards a clean local checkout to `origin/submit`. If a future revision needs another ordinary userspace command, `.inception/host-tools` can declare the command and a safe nixpkgs attribute; the evaluator supplies missing packages through an ephemeral Nix shell.
+Ordinary future changes to the `submit` branch do not require rebuilding the appliance. Project-specific behavior lives behind `submit/.inception/evaluate`. Missing userspace commands can be supplied through `.inception/host-tools`, while host-level changes are applied in-place with `inception-host-update` using `nixosConfigurations.inception-runtime`.
 
 An OVA rebuild is still appropriate when the guest itself must change—for example its kernel capabilities, CPU architecture, VirtualBox hardware definition, base disk capacity, or other host-level facilities.
 
