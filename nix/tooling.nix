@@ -51,7 +51,7 @@ let
   };
 in
 {
-  environment.etc."inception-host-abi".text = "2\n";
+  environment.etc."inception-host-abi".text = "3\n";
   environment.etc."inception-kernel-version".text =
     "${config.boot.kernelPackages.kernel.modDirVersion}\n";
 
