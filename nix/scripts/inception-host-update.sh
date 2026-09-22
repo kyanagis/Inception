@@ -45,6 +45,14 @@ if [[ -r /etc/inception-host-abi ]]; then
 fi
 [[ "$current_abi" =~ ^[0-9]+$ ]] || fail 'invalid installed host ABI marker'
 
+installed_kernel=
+if [[ -r /etc/inception-kernel-version ]]; then
+  installed_kernel=$(tr -d '[:space:]' < /etc/inception-kernel-version)
+fi
+if [[ -n "$installed_kernel" && "$(uname -r)" != "$installed_kernel" ]]; then
+  fail "host generation expects kernel $installed_kernel but running kernel is $(uname -r); reboot the appliance before continuing"
+fi
+
 if [[ -n "$required_abi" && "$current_abi" -ge "$required_abi" ]]; then
   printf 'Host ABI %s already satisfies required ABI %s.\n' "$current_abi" "$required_abi"
   exit 0
@@ -83,4 +91,15 @@ fi
 
 printf '%s\n' "$sha" | "$sudo_wrapper" tee /var/lib/inception/host-version >/dev/null
 "$sudo_wrapper" chmod 0644 /var/lib/inception/host-version
+
+expected_kernel=
+if [[ -r /etc/inception-kernel-version ]]; then
+  expected_kernel=$(tr -d '[:space:]' < /etc/inception-kernel-version)
+fi
+if [[ -n "$expected_kernel" && "$(uname -r)" != "$expected_kernel" ]]; then
+  printf 'Host runtime switched to ABI %s at %s, but kernel %s is still running; reboot once to activate kernel %s.\n' \
+    "$new_abi" "$sha" "$(uname -r)" "$expected_kernel" >&2
+  exit 75
+fi
+
 printf 'Host update complete: ABI %s, commit %s\n' "$new_abi" "$sha"
