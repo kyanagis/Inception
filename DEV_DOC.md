@@ -38,31 +38,32 @@ OVAはsubmit sourceを内包しません。特定commitもrelease metadataへ固
 
 inception-evaluateは次を行います。
 
-1. INCEPTION_LOGINの設定を検証する。
-2. /home/inception/Inception-submit が無ければremote submitをcloneする。
-3. 既存checkoutならtracked changeがないことを確認する。
-4. origin/submitをfetchしてfast-forwardする。
-5. .inception/host-toolsを検証する。
-6. OVAに不足commandがあれば対応するnixpkgs packageだけをephemeral shellへ追加する。
-7. make configure LOGIN=...、make doctor、make checkを実行する。
-8. 指定optionに応じてmake up/test/bonus/bonus-test/auditを実行する。
+1. INCEPTION_LOGINとOVA identity stateを検証する。
+2. evaluator管理のdisposable checkoutが無ければremote submitをcloneする。
+3. 既存checkoutをorigin/submitへresetし、secrets/とgenerated srcs/.env以外の
+   stale untracked stateを除去する。
+4. .inception/host-abiを読み、必要ならinception-host-updateでNixOS runtimeを更新する。
+5. .inception/host-toolsを安全なidentifier pairとして検証する。
+6. OVAに不足commandがあれば対応するnixpkgs packageをephemeral shellへ追加する。
+7. project固有処理を submit/.inception/evaluate へ委譲する。
+8. submit側ABIがprepare/mandatory/bonus/full/auditの状態遷移を所有する。
 
 host-toolsはshellとしてsourceしません。各行をcommand名とnixpkgs attributeの2つのidentifierとしてparseし、許可文字以外を拒否します。これによりsubmit更新が任意host command injectionになる経路を作りません。
 
-このcontractで吸収できる変更:
+このcontractでOVA再importなしに吸収できる変更:
 - Dockerfile、Compose、NGINX、PHP、MariaDB、WordPress設定
 - shell/Python検証script
 - 通常のuserspace CLI依存
 - mandatory/bonus test拡張
 - documentation
 - image/application version更新
+- host ABI更新で表現できるNixOS package、daemon、firewall、sysctl、kernel設定
 
-OVA再生成が必要になり得る変更:
-- guest kernel feature自体の変更
+OVA再生成が本当に必要になり得る変更:
 - x86_64以外へのarchitecture変更
-- VirtualBox virtual hardware requirement変更
-- system disk capacityそのものを超える要求
-- host daemon/kernel moduleをbuild時から組み込む要求
+- VirtualBox virtual hardware definitionの変更
+- virtual disk image/bootstrap自体の変更
+- 既存disk capacityでは更新不能な要求
 
 ## 4. 前提command
 
