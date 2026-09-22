@@ -20,6 +20,22 @@ let
     text = builtins.readFile ./scripts/inception-evaluate.sh;
   };
 
+  inceptionDiagnostics = pkgs.writeShellApplication {
+    name = "inception-diagnostics";
+    runtimeInputs = with pkgs; [
+      coreutils
+      docker
+      docker-compose
+      git
+      gnugrep
+      iproute2
+      procps
+      systemd
+      util-linux
+    ];
+    text = builtins.readFile ./scripts/inception-diagnostics.sh;
+  };
+
   inceptionAudit = pkgs.writeShellApplication {
     name = "inception-audit";
     runtimeInputs = with pkgs; [
@@ -45,10 +61,14 @@ in
   # satisfy the repository's .inception/host-tools contract with nix shell.
   environment.systemPackages = with pkgs; [
     inceptionAudit
+    inceptionDiagnostics
     inceptionEvaluate
 
     bashInteractive
+    actionlint
+    bat
     btop
+    clang
     cmake
     coreutils
     curl
@@ -57,24 +77,32 @@ in
     gawk
     gcc
     gdb
+    gh
     git
+    git-lfs
     gnumake
     gnugrep
     gnused
+    hadolint
+    helix
     htop
     iproute2
     iputils
     jq
     less
+    ltrace
     lsof
     ncdu
     nix
+    netcat-openbsd
+    neovim
     nmap
     openssl
     pkg-config
     procps
     python3
     ripgrep
+    sqlite
     rsync
     shellcheck
     shfmt
@@ -82,10 +110,14 @@ in
     strace
     tcpdump
     tmux
+    unzip
+    valgrind
     tree
     util-linux
     vim
     wget
     which
+    xz
+    zip
   ];
 }
