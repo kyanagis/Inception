@@ -110,3 +110,6 @@ grep -Fq 'chown www-data:www-data "$html/wp-content"' srcs/requirements/wordpres
   fail 'Redis object-cache lifecycle lacks its scoped writable wp-content transition'
 grep -Fq 'chown -R www-data:www-data "$redis_plugin"' srcs/requirements/wordpress/tools/entrypoint.sh ||
   fail 'Redis plugin lifecycle lacks its scoped writable transition'
+if grep -Fq 'chmod 0755 /run/php' srcs/requirements/wordpress/tools/entrypoint.sh; then
+  fail 'WordPress must rely on the declared tmpfs mode without CAP_FOWNER'
+fi

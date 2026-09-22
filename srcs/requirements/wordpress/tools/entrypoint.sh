@@ -33,7 +33,11 @@ state=$base/.inception-state
 staging=$base/.inception-wordpress
 for path in "$base" "$html" "$state" "$staging"; do [ ! -L "$path" ] || fail "Symlink WordPress path rejected"; done
 mkdir -p /run/php
-chmod 0755 /run/php
+# docker-compose declares /run/php as a mode=0755 tmpfs.  Do not chmod this
+# mount here: the service intentionally drops CAP_FOWNER, and NixOS Docker can
+# present the tmpfs with an unmapped owner even though its declared mode is
+# already correct.
+[ "$(stat -c %a /run/php)" = 755 ] || fail "Invalid PHP runtime directory permissions"
 chown www-data:www-data /run/php
 cleanup() { rm -f /run/php/app-client.cnf /run/php/wp-admin-password /run/php/wp-user-password /run/php/expected-identity; }
 trap cleanup EXIT
