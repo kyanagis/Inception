@@ -40,9 +40,18 @@ jobs:
             test -z "${extra:-}"
             [[ "$command" =~ ^[A-Za-z0-9._+-]+$ ]]
             [[ "$package" =~ ^[A-Za-z0-9._+-]+$ ]]
-            if ! command -v "$command" >/dev/null 2>&1; then
-              nix build --no-link "nixpkgs#$package"
-            fi
+            mapfile -t outputs < <(nix build --no-link --print-out-paths "nixpkgs#$package")
+            found=0
+            for output in "${outputs[@]}"; do
+              if [ -x "$output/bin/$command" ] || [ -x "$output/sbin/$command" ]; then
+                found=1
+                break
+              fi
+            done
+            [ "$found" -eq 1 ] || {
+              echo "nixpkgs#$package does not provide declared command $command" >&2
+              exit 1
+            }
           done < .inception/host-tools
 
       - name: Prepare isolated Docker data-root
@@ -81,13 +90,18 @@ jobs:
           site_after="$(docker compose --env-file srcs/.env -f srcs/docker-compose.yml exec -T --user www-data wordpress wp option get siteurl --path=/var/www/html)"
           test "$site_before" = "$site_after"
 
-      - name: Stable submit evaluation ABI
+      - name: Stable submit evaluation ABI and mode transition matrix
         shell: bash
         env:
           INCEPTION_LOGIN: runner
         run: |
           set -euo pipefail
+          # Existing mandatory state -> mandatory -> bonus.
           sh ./.inception/evaluate full
+          # Prove the same persistent volumes can converge back to mandatory
+          # and then to bonus again without stale WordPress/Redis state.
+          make test
+          make bonus-test
 
       - name: Evidence
         if: always()
