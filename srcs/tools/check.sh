@@ -115,3 +115,7 @@ if grep -Fq 'chmod 0755 /run/php' srcs/requirements/wordpress/tools/entrypoint.s
 fi
 grep -Fq 'find "$redis_plugin" -xdev -exec chown root:www-data {} +' srcs/requirements/wordpress/tools/entrypoint.sh ||
   fail 'Redis plugin ownership is not restored after its scoped writable transition'
+
+grep -Fq 'runuser -u www-data -- chmod 0755' srcs/requirements/wordpress/tools/entrypoint.sh &&
+grep -Fq 'runuser -u www-data -- chmod 0644' srcs/requirements/wordpress/tools/entrypoint.sh ||
+  fail 'Redis plugin modes must be normalized before root ownership'
