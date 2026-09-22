@@ -25,6 +25,50 @@ jobs:
         uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
         with:
           persist-credentials: false
+          fetch-depth: 0
+      - name: Require host ABI bump for runtime changes
+        if: github.event_name != 'workflow_dispatch'
+        shell: bash
+        env:
+          EVENT_NAME: ${{ github.event_name }}
+          BASE_SHA: ${{ github.event.pull_request.base.sha || github.event.before }}
+        run: |
+          set -euo pipefail
+          base="$BASE_SHA"
+          [ -n "$base" ] || { echo "No base SHA available; skipping ABI delta check"; exit 0; }
+          case "$base" in
+            0000000000000000000000000000000000000000) exit 0 ;;
+          esac
+
+          runtime_paths=(
+            flake.nix
+            flake.lock
+            nix/base.nix
+            nix/tooling.nix
+            nix/virtualbox.nix
+            nix/scripts/inception-host-update.sh
+            nix/scripts/inception-evaluate.sh
+          )
+          changed="$(git diff --name-only "$base" "$GITHUB_SHA" -- "${runtime_paths[@]}")"
+          [ -n "$changed" ] || exit 0
+
+          extract_abi() {
+            sed -n 's/.*inception-host-abi".text = "\([0-9][0-9]*\)\\n";.*/\1/p' | head -n 1
+          }
+          old_abi="$(git show "$base:nix/tooling.nix" | extract_abi)"
+          new_abi="$(extract_abi < nix/tooling.nix)"
+          [ -n "$old_abi" ] && [ -n "$new_abi" ] || {
+            echo "Unable to parse host ABI from nix/tooling.nix" >&2
+            exit 1
+          }
+          if [ "$new_abi" -le "$old_abi" ]; then
+            echo "Runtime-affecting files changed without a host ABI bump." >&2
+            echo "base ABI=$old_abi current ABI=$new_abi" >&2
+            printf 'changed runtime files:\n%s\n' "$changed" >&2
+            exit 1
+          fi
+          printf 'Host ABI bump verified: %s -> %s\n' "$old_abi" "$new_abi"
+
       - name: Install Nix
         uses: DeterminateSystems/determinate-nix-action@527f17dd63d2d60d3e5552934bc84b9a33a14d11
       - name: Check NixOS and universal tooling contract
