@@ -81,6 +81,53 @@ jobs:
           fi
           printf 'Host ABI contract satisfied: submit=%s main=%s\n' "$required" "$provided"
 
+      - name: Validate main runtime satisfies submit host contract
+        shell: bash
+        run: |
+          set -euo pipefail
+          main_dir="$RUNNER_TEMP/inception-main"
+          git worktree add --detach "$main_dir" refs/remotes/origin/main >/dev/null
+          trap 'git worktree remove --force "$main_dir" >/dev/null 2>&1 || true' EXIT
+
+          system="$(nix eval --raw "path:$main_dir#nixosConfigurations.inception-runtime.pkgs.stdenv.hostPlatform.system")"
+          docker_version="$(nix eval --raw "path:$main_dir#nixosConfigurations.inception-runtime.config.virtualisation.docker.package.version")"
+          compose_version="$(nix eval --raw "path:$main_dir#nixosConfigurations.inception-runtime.pkgs.docker-compose.version")"
+          firewall_ports="$(nix eval --json "path:$main_dir#nixosConfigurations.inception-runtime.config.networking.firewall.allowedTCPPorts")"
+          firewall_ranges="$(nix eval --json "path:$main_dir#nixosConfigurations.inception-runtime.config.networking.firewall.allowedTCPPortRanges")"
+
+          required_arch="$(jq -r '.architecture' .inception/host-contract.json)"
+          required_docker="$(jq -r '.docker_engine_min' .inception/host-contract.json)"
+          required_compose="$(jq -r '.docker_compose_min' .inception/host-contract.json)"
+          [ "$system" = "$required_arch-linux" ] || {
+            echo "main runtime architecture $system does not satisfy $required_arch" >&2
+            exit 1
+          }
+          [ "$(printf '%s\n' "$required_docker" "$docker_version" | sort -V | head -n 1)" = "$required_docker" ] || {
+            echo "main Docker $docker_version is below required $required_docker" >&2
+            exit 1
+          }
+          [ "$(printf '%s\n' "$required_compose" "$compose_version" | sort -V | head -n 1)" = "$required_compose" ] || {
+            echo "main Compose $compose_version is below required $required_compose" >&2
+            exit 1
+          }
+
+          jq -e --argjson host "$firewall_ports" '
+            all(.public_tcp_ports[]; . as $p | ($host | index($p)) != null)
+          ' .inception/host-contract.json >/dev/null || {
+            echo "main firewall does not expose every required public TCP port" >&2
+            echo "main ports=$firewall_ports" >&2
+            exit 1
+          }
+          jq -e --argjson host "$firewall_ranges" '
+            all(.public_tcp_ranges[]; . as $required |
+              any($host[]; .from <= $required.from and .to >= $required.to))
+          ' .inception/host-contract.json >/dev/null || {
+            echo "main firewall does not cover every required public TCP range" >&2
+            echo "main ranges=$firewall_ranges" >&2
+            exit 1
+          }
+          printf 'Main runtime satisfies host contract: %s, Docker %s, Compose %s\n'             "$system" "$docker_version" "$compose_version"
+
       - name: Validate universal OVA tool declarations
         shell: bash
         run: |
