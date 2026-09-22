@@ -73,9 +73,10 @@ jobs:
           set -euo pipefail
           export HOME="$RUNNER_TEMP/vbox-home"
           mkdir -p "$HOME"
-          nix shell nixpkgs#virtualbox --command bash -euo pipefail -c '
+          nix shell nixpkgs#virtualbox nixpkgs#openssh --command bash -euo pipefail -c '
             vm="InceptionReleaseSmoke"
             cleanup() {
+              VBoxManage controlvm "$vm" poweroff >/dev/null 2>&1 || true
               VBoxManage unregistervm "$vm" --delete >/dev/null 2>&1 || true
             }
             trap cleanup EXIT
@@ -84,6 +85,21 @@ jobs:
             grep -Fq "name=\"$vm\"" release-assets/VBOX-IMPORT.txt
             grep -Eq "^memory=4096$" release-assets/VBOX-IMPORT.txt
             grep -Eq "^cpus=4$" release-assets/VBOX-IMPORT.txt
+
+            VBoxManage modifyvm "$vm" --natpf1 "ssh,tcp,127.0.0.1,2222,,22"
+            VBoxManage startvm "$vm" --type headless
+            booted=0
+            for attempt in $(seq 1 180); do
+              if ssh-keyscan -T 2 -p 2222 127.0.0.1 > release-assets/SSH-HOSTKEYS.txt 2>/dev/null &&
+                 test -s release-assets/SSH-HOSTKEYS.txt; then
+                booted=1
+                break
+              fi
+              sleep 1
+            done
+            test "$booted" -eq 1
+            VBoxManage showvminfo "$vm" --machinereadable > release-assets/VBOX-BOOTED.txt
+            grep -Eq "^VMState=\"running\"$" release-assets/VBOX-BOOTED.txt
           '
 
       - name: Publish import evidence
@@ -94,5 +110,7 @@ jobs:
             release-assets/BUILD-PROVENANCE.txt
             release-assets/OVA-CAPABILITIES.txt
             release-assets/VBOX-IMPORT.txt
+            release-assets/VBOX-BOOTED.txt
+            release-assets/SSH-HOSTKEYS.txt
           if-no-files-found: error
           retention-days: 30
