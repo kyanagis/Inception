@@ -3,17 +3,27 @@ COMPOSE := docker --host unix:///var/run/docker.sock compose --env-file srcs/.en
 export LOGIN
 .DEFAULT_GOAL := all
 .NOTPARALLEL:
-.PHONY: all host-setup configure preflight doctor setup config build bonus-build up bonus down stop start restart status logs check audit test bonus-test backup-now backup-list backup-verify clean fclean re help
+.PHONY: all auto-configure host-setup configure preflight doctor setup config build bonus-build up bonus down stop start restart status logs check audit test bonus-test backup-now backup-list backup-verify clean fclean re help
 
 all: up
+
+auto-configure:
+	@set -eu; \
+	login="${LOGIN:-${INCEPTION_LOGIN:-}}"; \
+	if [ -f srcs/.env ]; then \
+	  if [ -n "$login" ]; then ./srcs/tools/configure.sh "$login" >/dev/null; fi; \
+	else \
+	  [ -n "$login" ] || { printf '%s\n' 'No runtime login configured. In the published OVA run inception-setup LOGIN once; on Debian use make configure LOGIN=LOGIN.' >&2; exit 2; }; \
+	  ./srcs/tools/configure.sh "$login"; \
+	fi
 
 host-setup:
 	@./srcs/tools/host-setup.sh "$$LOGIN"
 
 configure:
-	@./srcs/tools/configure.sh "$$LOGIN"
+	@set -eu; login="${LOGIN:-${INCEPTION_LOGIN:-}}"; [ -n "$login" ] || { printf '%s\n' 'Usage: make configure LOGIN=login' >&2; exit 2; }; ./srcs/tools/configure.sh "$login"
 
-preflight:
+preflight: auto-configure
 	@./srcs/tools/preflight.sh
 
 doctor: preflight
