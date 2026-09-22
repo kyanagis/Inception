@@ -119,7 +119,8 @@ Redis ACL:
 - random 64-hex password
 - WordPress userのみ
 - read/write/connection/scripting category
-- flush/config/acl/shutdown/module/replication/persistence control commandを明示deny
+- Redis Object Cache 2.6.0のenable/flush lifecycleに必要なFLUSHDBだけ許可
+- FLUSHALL/config/acl/shutdown/module/replication/persistence control commandを明示deny
 
 ## 7. WordPress boundary
 
