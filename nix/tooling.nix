@@ -20,6 +20,19 @@ let
     text = builtins.readFile ./scripts/inception-evaluate.sh;
   };
 
+  inceptionHostUpdate = pkgs.writeShellApplication {
+    name = "inception-host-update";
+    runtimeInputs = with pkgs; [
+      bash
+      coreutils
+      git
+      gnugrep
+      nix
+      sudo
+    ];
+    text = builtins.readFile ./scripts/inception-host-update.sh;
+  };
+
   inceptionAudit = pkgs.writeShellApplication {
     name = "inception-audit";
     runtimeInputs = with pkgs; [
@@ -39,6 +52,8 @@ let
   };
 in
 {
+  environment.etc."inception-host-abi".text = "1\n";
+
   # Broad, license-free baseline.  Ordinary submit changes should consume this
   # environment instead of forcing a new appliance build.  If a future submit
   # revision still needs another userspace command, inception-evaluate can
@@ -46,6 +61,7 @@ in
   environment.systemPackages = with pkgs; [
     inceptionAudit
     inceptionEvaluate
+    inceptionHostUpdate
 
     bashInteractive
     btop
