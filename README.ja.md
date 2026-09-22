@@ -13,7 +13,7 @@ mandatoryとbonusをまとめて完全検証する場合:
 
     inception-evaluate --full
 
-OVAにはDocker/Compose、Nix、jq、Python、C/C++ build tools、GDB、strace、shellcheck、nmap、tcpdump、socat、Git、ripgrep、rsync、tmux、Firefox、VSCodium、Meld、Kitty、Vim、仮説駆動診断用の`inception-audit`を同梱します。
+OVAにはDocker/Compose、Nix、jq、Python、C/C++ build tools、GDB、Valgrind、strace、ltrace、shellcheck、actionlint、hadolint、nmap、tcpdump、socat、netcat、Git/GitHub CLI、ripgrep、rsync、tmux、SQLite、Firefox、VSCodium、Meld、Kitty、Vim/Neovim/Helix、仮説駆動の`inception-audit`、secretを収集しない`inception-diagnostics`を同梱します。
 
 通常の`submit`変更ではOVAを再生成しません。evaluatorはcleanなlocal checkoutを`origin/submit`へfast-forwardします。将来通常のuserspace commandが追加で必要になった場合は、submit側の`.inception/host-tools`でcommandと安全なnixpkgs attributeを宣言でき、不足packageだけephemeral Nix shellで補完します。
 
