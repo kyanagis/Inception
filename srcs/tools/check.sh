@@ -49,6 +49,11 @@ printf '%s' "$config" | jq -e '
 grep -Fqx '!tools/healthcheck.sh' srcs/requirements/wordpress/.dockerignore ||
   fail 'WordPress .dockerignore excludes the healthcheck copied by its Dockerfile'
 
+for required in '!tools/entrypoint.sh' '!tools/healthcheck.sh'; do
+  grep -Fqx "$required" srcs/requirements/bonus/redis/.dockerignore ||
+    fail "Redis .dockerignore excludes runtime scripts required by its Dockerfile"
+done
+
 for image in mariadb wordpress nginx redis ftp static-site adminer backup; do
   file=$(find srcs/requirements -path "*/$image/Dockerfile")
   [ "$(printf '%s\n' "$file" | wc -l)" -eq 1 ] && [ -f "$file" ] ||
