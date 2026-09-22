@@ -1,0 +1,12 @@
+{
+  "schema": 1,
+  "host_abi": 1,
+  "architecture": "x86_64",
+  "docker_engine_min": "27.0.3",
+  "docker_compose_min": "2.38.2",
+  "public_tcp_ports": [443, 2121],
+  "public_tcp_ranges": [
+    {"from": 21100, "to": 21110}
+  ],
+  "loopback_tcp_ports": [8080, 8081]
+}
