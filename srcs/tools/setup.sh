@@ -117,12 +117,10 @@ chmod 0600 "$private_key"
 
 ftps_certificate="$secrets_dir/ftps_certificate.pem"
 ftps_private_key="$secrets_dir/ftps_private_key.pem"
-if ! verify_pair "$ftps_certificate" "$ftps_private_key"; then
-  [ ! -e "$ftps_certificate" ] && [ ! -L "$ftps_certificate" ] &&
-    [ ! -e "$ftps_private_key" ] && [ ! -L "$ftps_private_key" ] || {
-      echo 'Existing FTPS certificate/key is invalid; refusing replacement' >&2; exit 1;
-    }
+ftps_managed="$secrets_dir/.ftps-managed"
+generate_ftps_pair() {
   temporary_ftps=$(mktemp -d "$secrets_dir/.ftps.XXXXXXXX")
+  trap 'rm -rf "$temporary_ftps"' EXIT HUP INT TERM
   openssl req -x509 -newkey ec -pkeyopt ec_paramgen_curve:prime256v1 \
     -sha256 -nodes -days 365 -keyout "$temporary_ftps/private-key.pem" \
     -out "$temporary_ftps/certificate.pem" -subj "/CN=$domain_name" \
@@ -130,9 +128,30 @@ if ! verify_pair "$ftps_certificate" "$ftps_private_key"; then
     -addext 'keyUsage=critical,digitalSignature,keyAgreement' \
     -addext 'extendedKeyUsage=serverAuth' >/dev/null 2>&1
   verify_pair "$temporary_ftps/certificate.pem" "$temporary_ftps/private-key.pem" || exit 1
+  chmod 0644 "$temporary_ftps/certificate.pem"
+  chmod 0600 "$temporary_ftps/private-key.pem"
   mv -T "$temporary_ftps/certificate.pem" "$ftps_certificate"
   mv -T "$temporary_ftps/private-key.pem" "$ftps_private_key"
   rmdir "$temporary_ftps"
+  trap - EXIT HUP INT TERM
+}
+
+if ! verify_pair "$ftps_certificate" "$ftps_private_key"; then
+  if [ -e "$ftps_certificate" ] || [ -L "$ftps_certificate" ] ||
+     [ -e "$ftps_private_key" ] || [ -L "$ftps_private_key" ]; then
+    [ ! -L "$ftps_managed" ] &&
+      [ "$(cat "$ftps_managed" 2>/dev/null || :)" = inception-ftps-v1 ] || {
+        echo 'Existing external FTPS certificate/key is invalid; refusing replacement' >&2
+        exit 1
+      }
+    [ -z "$(docker --host unix:///var/run/docker.sock ps -q --filter label=com.docker.compose.project=inception)" ] || {
+      echo 'Stop the stack before renewing its managed FTPS certificate' >&2
+      exit 1
+    }
+  fi
+  generate_ftps_pair
+  printf '%s\n' inception-ftps-v1 > "$ftps_managed"
+  chmod 0600 "$ftps_managed"
 fi
 chmod 0644 "$ftps_certificate"
 chmod 0600 "$ftps_private_key"
