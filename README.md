@@ -34,26 +34,31 @@ There are two supported host modes. Do not mix their bootstrap procedures.
 
 The OVA already configures Docker and its persistent data-root. Do not run make host-setup inside the OVA.
 
-First configure the 42 login:
+Configure the 42 login, clone current submit, and run make:
 
     inception-setup kyanagis
-
-Open a new terminal. The universal evaluator can then fetch the current submit branch and prepare it:
-
-    inception-evaluate --prepare
-
-The equivalent manual procedure is:
-
     cd /home/inception
-    git clone --branch submit --single-branch       https://github.com/kyanagis/Inception.git Inception-submit
-    cd Inception-submit
-    make configure LOGIN="$INCEPTION_LOGIN"
-    make doctor
-    make check
-    make up
+    git clone --branch submit --single-branch \
+      https://github.com/kyanagis/Inception.git Inception
+    cd Inception
+    make
     make test
 
-The OVA is intentionally not tied to a specific submit commit. inception-evaluate fast-forwards a clean checkout to the current remote submit branch and reads .inception/host-tools. If a future submit revision requires an additional ordinary userspace tool, the evaluator can provide the missing Nix package ephemerally without rebuilding the appliance.
+A new terminal is not required. make can read the managed identity from
+/var/lib/inception/environment, generates the ignored runtime srcs/.env,
+checks the appliance host ABI, and converges the mandatory stack.
+
+For an evaluator-managed disposable checkout:
+
+    inception-evaluate --full
+
+The OVA intentionally contains no assessed submit source and is not tied to a
+specific submit commit. inception-evaluate resets its disposable checkout to
+current origin/submit, preserves generated runtime state, validates
+.inception/host-abi and .inception/host-tools, and delegates project-specific
+behavior to submit/.inception/evaluate. Missing ordinary userspace tools are
+supplied through an ephemeral Nix shell; host-level requirements can be
+applied in place with inception-host-update instead of re-importing the OVA.
 
 ### B. Generic dedicated Debian VM
 
