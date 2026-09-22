@@ -101,8 +101,8 @@ jobs:
           # to a writable QCOW2 solely for the cross-hypervisor boot probe.
           disk="$GITHUB_WORKSPACE/release-assets/boot-disk/inception-boot.qcow2"
           nix shell nixpkgs#qemu --command qemu-img convert -f vmdk -O qcow2 "$source_disk" "$disk"
-          qemu-img_info="$(nix shell nixpkgs#qemu --command qemu-img info --output=json "$disk")"
-          printf '%s\n' "$qemu-img_info" > release-assets/QEMU-DISK.json
+          qemu_img_info="$(nix shell nixpkgs#qemu --command qemu-img info --output=json "$disk")"
+          printf '%s\n' "$qemu_img_info" > release-assets/QEMU-DISK.json
           jq -e '.format == "qcow2"' release-assets/QEMU-DISK.json >/dev/null
 
           nix shell nixpkgs#qemu nixpkgs#openssh nixpkgs#socat --command bash -euo pipefail -c '
