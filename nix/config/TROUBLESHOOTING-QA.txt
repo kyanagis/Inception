@@ -87,3 +87,10 @@ secretだけを再生成せず、backupと元secretを確保してから復旧�
 
 Q. fcleanしてよいですか。
 A. container、image、named volume dataを削除します。検証済みbackupがある場合だけ実行してください。
+
+Q. host capabilityが古いと言われます。
+A.
+
+    inception-host-update
+
+OVAを再importせずcurrent mainのx86_64 runtimeへ更新できます。
