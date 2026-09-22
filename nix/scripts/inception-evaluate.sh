@@ -75,8 +75,24 @@ if [[ ! -d "$repo_dir/.git" ]]; then
   mkdir -p "$(dirname "$repo_dir")"
   git clone --branch submit --single-branch "$remote" "$repo_dir"
 elif ((update)); then
-  [[ -z "$(git -C "$repo_dir" status --porcelain --untracked-files=no)" ]] ||
-    fail 'tracked local changes exist; commit/stash them before updating'
+  mapfile -t changed < <(
+    {
+      git -C "$repo_dir" diff --name-only
+      git -C "$repo_dir" diff --cached --name-only
+    } | sort -u
+  )
+  if (("${#changed[@]}" > 0)); then
+    if (("${#changed[@]}" == 1)) && [[ "${changed[0]}" == srcs/.env ]]; then
+      # make configure materializes evaluator-specific state in the tracked
+      # template. This checkout is disposable, so restore only that generated
+      # file before pulling the next submit revision.
+      git -C "$repo_dir" restore --staged --worktree -- srcs/.env
+    else
+      printf 'Tracked changes exist in evaluation checkout:\n' >&2
+      printf '  %s\n' "${changed[@]}" >&2
+      fail 'refusing to overwrite changes other than generated srcs/.env'
+    fi
+  fi
   git -C "$repo_dir" fetch --prune origin refs/heads/submit:refs/remotes/origin/submit
   if git -C "$repo_dir" show-ref --verify --quiet refs/heads/submit; then
     git -C "$repo_dir" switch submit >/dev/null
