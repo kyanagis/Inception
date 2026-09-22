@@ -25,6 +25,39 @@ jobs:
         uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
         with:
           persist-credentials: false
+          fetch-depth: 0
+
+      - name: Require ABI bump when host contract changes
+        if: github.event_name != 'workflow_dispatch'
+        shell: bash
+        env:
+          BASE_SHA: ${{ github.event.pull_request.base.sha || github.event.before }}
+        run: |
+          set -euo pipefail
+          base="$BASE_SHA"
+          [ -n "$base" ] || exit 0
+          case "$base" in
+            0000000000000000000000000000000000000000) exit 0 ;;
+          esac
+          if ! git cat-file -e "$base:.inception/host-contract.json" 2>/dev/null; then
+            echo "No previous host contract; treating this as initial contract introduction."
+            exit 0
+          fi
+          if git diff --quiet "$base" "$GITHUB_SHA" -- .inception/host-contract.json; then
+            exit 0
+          fi
+          old_abi="$(git show "$base:.inception/host-abi" | tr -d '[:space:]')"
+          new_abi="$(tr -d '[:space:]' < .inception/host-abi)"
+          [[ "$old_abi" =~ ^[0-9]+$ && "$new_abi" =~ ^[0-9]+$ ]] || {
+            echo "Invalid host ABI while checking contract change" >&2
+            exit 1
+          }
+          if [ "$new_abi" -le "$old_abi" ]; then
+            echo "Host contract changed without incrementing .inception/host-abi" >&2
+            echo "old ABI=$old_abi new ABI=$new_abi" >&2
+            exit 1
+          fi
+          printf 'Host contract ABI bump verified: %s -> %s\n' "$old_abi" "$new_abi"
 
       - name: Install Nix for forward-compatible tool checks
         uses: DeterminateSystems/determinate-nix-action@527f17dd63d2d60d3e5552934bc84b9a33a14d11 # v3.22.2
