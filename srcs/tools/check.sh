@@ -77,6 +77,8 @@ grep -Fq 'location ~ /\. { deny all; }' srcs/requirements/nginx/conf/nginx.conf.
   fail 'hidden-file protection missing'
 grep -Fq "DISALLOW_FILE_MODS' => true" srcs/requirements/wordpress/tools/configure.php ||
   fail 'WordPress file modification protection missing'
+grep -Fq "define('WP_REDIS_PASSWORD', ['wordpress'," srcs/requirements/wordpress/tools/configure.php ||
+  fail 'Redis ACL credential array missing from WordPress configuration'
 grep -Fq 'user default off' srcs/requirements/bonus/redis/tools/entrypoint.sh ||
   fail 'Redis default ACL user must be disabled'
 grep -Fq 'exec gosu redis "$@"' srcs/requirements/bonus/redis/tools/entrypoint.sh ||
