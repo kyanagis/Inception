@@ -118,9 +118,11 @@ jobs:
               -cpu host \
               -m 4096 \
               -smp 4 \
-              -drive "file=$disk,format=vmdk,if=ide,media=disk" \
+              -device ich9-ahci,id=sata \
+              -drive "file=$disk,format=vmdk,if=none,id=osdisk,cache=none" \
+              -device ide-hd,drive=osdisk,bus=sata.0 \
               -netdev user,id=net0,hostfwd=tcp:127.0.0.1:2222-:22 \
-              -device e1000,netdev=net0 \
+              -device virtio-net-pci,netdev=net0 \
               -display none \
               -serial "file:$serial" \
               -daemonize \
