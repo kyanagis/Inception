@@ -46,6 +46,23 @@ printf '%s' "$config" | jq -e '
     all(.value.tmpfs[]?; contains("size=") and contains("nosuid") and contains("nodev") and contains("noexec")))
 ' >/dev/null || fail 'Least-privilege service boundaries are incomplete'
 
+printf '%s' "$config" | jq -e '
+  def allowed_cap:
+    . == "CHOWN" or
+    . == "DAC_OVERRIDE" or
+    . == "DAC_READ_SEARCH" or
+    . == "KILL" or
+    . == "NET_BIND_SERVICE" or
+    . == "SETGID" or
+    . == "SETUID" or
+    . == "SYS_CHROOT";
+  all(.services[]; all((.cap_add // [])[]; allowed_cap)) and
+  ((.services.mariadb.cap_add // []) | sort ==
+    ["CHOWN", "DAC_OVERRIDE", "KILL", "SETGID", "SETUID"]) and
+  ((.services.redis.cap_add // []) | sort ==
+    ["CHOWN", "DAC_OVERRIDE", "KILL", "SETGID", "SETUID"])
+' >/dev/null || fail 'Container capability allowlist is broader than the reviewed contract'
+
 grep -Fqx '!tools/healthcheck.sh' srcs/requirements/wordpress/.dockerignore ||
   fail 'WordPress .dockerignore excludes the healthcheck copied by its Dockerfile'
 
