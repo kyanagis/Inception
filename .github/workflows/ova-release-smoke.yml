@@ -42,6 +42,19 @@ jobs:
           test -s release-assets/inception.ova.part-01
           test -s release-assets/SHA256SUMS
 
+      - name: Verify release provenance matches ova-latest tag
+        shell: bash
+        env:
+          GH_TOKEN: ${{ github.token }}
+          GH_REPO: ${{ github.repository }}
+        run: |
+          set -euo pipefail
+          source_sha="$(sed -n 's/^OVA source commit: //p' release-assets/BUILD-PROVENANCE.txt)"
+          test -n "$source_sha"
+          tag_sha="$(gh api "repos/$GH_REPO/git/ref/tags/ova-latest" --jq '.object.sha')"
+          test "$source_sha" = "$tag_sha"
+          printf 'Published OVA provenance matches tag: %s\n' "$source_sha"
+
       - name: Reassemble and verify published OVA
         shell: bash
         working-directory: release-assets
