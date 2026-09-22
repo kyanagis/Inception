@@ -113,7 +113,7 @@ latest tagは使いません。
 - explicit bridge networks
 - health checks
 
-RedisだけはCompose file-backed secretの0600 ownership問題を安全に処理するためentrypointをrootで開始します。root phaseではsecretを読み、/run/redis/users.aclをtmpfsへ生成し、CHOWN/SETUID/SETGIDの最小capabilityだけを使った後、gosu redisでdaemonを非root起動します。固定UID/GIDは使用しません。
+RedisだけはCompose file-backed secretの0600 ownership問題を安全に処理するためentrypointをrootで開始します。root phaseではsecretを読み、/run/redis/users.aclをtmpfsへ生成し、CHOWN/DAC_OVERRIDE/SETUID/SETGIDを使った後、gosu redisでdaemonを非root起動します。Composeの init: true によるtiniがUIDの異なるdaemonへ停止signalを転送できるようKILLもRedis/MariaDBだけへ許可します。SYS_ADMINなどの強いcapabilityは静的checkで拒否します。固定UID/GIDは使用しません。
 
 Redis ACL:
 - default user off
