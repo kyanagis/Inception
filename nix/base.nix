@@ -374,7 +374,7 @@ in
     if [ -s ${loginStateDirectory}/login ]; then
       login="$(cat ${loginStateDirectory}/login)"
       case "$login" in
-        ''|[!a-z]*|*[!a-z0-9-]*|*-|root|inception)
+        ""|[!a-z]*|*[!a-z0-9-]*|*-|root|inception)
           echo "Invalid persisted Inception login: $login" >&2
           exit 1
           ;;
