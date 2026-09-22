@@ -95,10 +95,23 @@ jobs:
           disk="$(find release-assets/boot-disk -maxdepth 1 -type f -name '*.vmdk' -print -quit)"
           test -n "$disk"
 
-          nix shell nixpkgs#qemu nixpkgs#openssh --command bash -euo pipefail -c '
+          nix shell nixpkgs#qemu nixpkgs#openssh nixpkgs#socat --command bash -euo pipefail -c '
             disk="$1"
             pidfile="$RUNNER_TEMP/inception-qemu.pid"
             serial="$GITHUB_WORKSPACE/release-assets/QEMU-SERIAL.txt"
+            monitor="$RUNNER_TEMP/inception-qemu.monitor"
+            monitor_log="$GITHUB_WORKSPACE/release-assets/QEMU-MONITOR.txt"
+            screen="$GITHUB_WORKSPACE/release-assets/QEMU-SCREEN.ppm"
+
+            dump_state() {
+              {
+                printf "info status\n"
+                printf "info block\n"
+                printf "info pci\n"
+                printf "screendump %s\n" "$screen"
+              } | socat - "UNIX-CONNECT:$monitor" > "$monitor_log" 2>&1 || true
+            }
+
             cleanup() {
               if [ -s "$pidfile" ]; then
                 pid="$(cat "$pidfile")"
@@ -123,8 +136,10 @@ jobs:
               -device ide-hd,drive=osdisk,bus=sata.0 \
               -netdev user,id=net0,hostfwd=tcp:127.0.0.1:2222-:22 \
               -device virtio-net-pci,netdev=net0 \
+              -boot order=c,menu=off \
               -display none \
               -serial "file:$serial" \
+              -monitor "unix:$monitor,server=on,wait=off" \
               -daemonize \
               -pidfile "$pidfile"
 
@@ -137,14 +152,18 @@ jobs:
               fi
               kill -0 "$(cat "$pidfile")" >/dev/null 2>&1 || {
                 echo "QEMU exited before sshd became reachable" >&2
+                dump_state
                 cat "$serial" >&2 || true
+                cat "$monitor_log" >&2 || true
                 exit 1
               }
               sleep 1
             done
             if [ "$booted" -ne 1 ]; then
               echo "Published OVA did not reach sshd within the boot budget" >&2
+              dump_state
               cat "$serial" >&2 || true
+              cat "$monitor_log" >&2 || true
               exit 1
             fi
             printf "Published OVA booted to sshd through KVM.\n" | tee "$GITHUB_WORKSPACE/release-assets/QEMU-BOOT.txt"
@@ -161,6 +180,8 @@ jobs:
             release-assets/VBOX-IMPORT.txt
             release-assets/QEMU-BOOT.txt
             release-assets/QEMU-SERIAL.txt
+            release-assets/QEMU-MONITOR.txt
+            release-assets/QEMU-SCREEN.ppm
             release-assets/SSH-HOSTKEYS.txt
           if-no-files-found: warn
           retention-days: 30
