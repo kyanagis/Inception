@@ -94,6 +94,15 @@ php -l "$config" >/dev/null || fail "Invalid generated WordPress configuration"
 chmod 0640 "$config"
 chown www-data:www-data "$config"
 mv -T "$config" "$html/wp-config.php"
+# The Redis object-cache plugin is loaded by every wp CLI invocation when a
+# previous bonus run has enabled its drop-in.  It may normalize its bundled
+# files while loading, and redis enable/disable creates or removes the drop-in.
+# Therefore this scoped writable window must start before the first as_wp
+# command; the immutable policy is restored below before PHP-FPM starts.
+redis_plugin="$html/wp-content/plugins/redis-cache"
+[ -d "$redis_plugin" ] && [ ! -L "$redis_plugin" ] || fail "Redis plugin directory is missing or unsafe"
+chown www-data:www-data "$html/wp-content"
+chown -R www-data:www-data "$redis_plugin"
 as_wp() { runuser -u www-data -- wp --path="$html" "$@"; }
 if ! as_wp core is-installed >/dev/null 2>&1; then
     tables=$(mariadb --defaults-file=/run/php/app-client.cnf --batch --skip-column-names -e 'SHOW TABLES') || fail "Unable to inspect existing WordPress schema"
@@ -110,14 +119,6 @@ if ! as_wp user get "$WP_USER" --field=ID >/dev/null 2>&1; then
 fi
 as_wp eval-file /usr/local/lib/inception/check-account.php "$WP_USER" author /run/php/wp-user-password >/dev/null
 chown -R www-data:www-data "$html/wp-content"
-redis_plugin="$html/wp-content/plugins/redis-cache"
-# The Redis object-cache CLI creates/removes wp-content/object-cache.php and
-# may normalize its bundled plugin files.  Previous boots deliberately return
-# wp-content to root ownership below, so grant www-data access only for these
-# controlled CLI operations and restore the immutable policy afterwards.
-[ -d "$redis_plugin" ] && [ ! -L "$redis_plugin" ] || fail "Redis plugin directory is missing or unsafe"
-chown www-data:www-data "$html/wp-content"
-chown -R www-data:www-data "$redis_plugin"
 if [ "$WP_REDIS_DISABLED" = 0 ]; then
     redis_ready=0
     for attempt in $(seq 1 60); do
