@@ -52,7 +52,15 @@ user_count=$($compose exec -T --user www-data wordpress wp user list --field=use
 [ "$user_count" -ge 2 ]
 admin_name=$($compose exec -T --user www-data wordpress wp user list --role=administrator --field=user_login --path=/var/www/html)
 case "$admin_name" in *[Aa][Dd][Mm][Ii][Nn]*) echo 'Administrator login contains prohibited admin substring' >&2; exit 1;; esac
-$compose exec -T --user www-data wordpress wp core verify-checksums --path=/var/www/html >/dev/null
+# WordPress deliberately has no Internet egress: both of its networks are
+# internal. The Docker build already authenticates the upstream WordPress
+# archive with a pinned SHA-256, so verify the running immutable core against
+# that local, authenticated copy instead of calling api.wordpress.org.
+$compose exec -T wordpress diff -qr \
+  --exclude=wp-content \
+  --exclude=wp-config.php \
+  --exclude=.htaccess \
+  /usr/src/wordpress /var/www/html >/dev/null
 $compose exec -T wordpress sh -ec '
   test "$(stat -c %U:%G /var/www/html/wp-settings.php)" = root:www-data
   test ! -w /var/www/html/wp-settings.php
