@@ -1,0 +1,48 @@
+#!/bin/sh
+set -eu
+
+mode=${1:-prepare}
+case "$mode" in
+  prepare|mandatory|bonus|full|audit|update-only) ;;
+  *) printf 'Usage: .inception/evaluate [prepare|mandatory|bonus|full|audit|update-only]\n' >&2; exit 2 ;;
+esac
+
+if [ "$mode" = update-only ]; then
+  exit 0
+fi
+
+login=${INCEPTION_LOGIN:-${LOGIN:-}}
+[ -n "$login" ] || {
+  printf 'No 42 login in environment. In the published OVA run inception-setup LOGIN once.\n' >&2
+  exit 2
+}
+
+make configure LOGIN="$login"
+make doctor
+make check
+
+case "$mode" in
+  prepare)
+    ;;
+  mandatory)
+    make up
+    make test
+    make audit
+    ;;
+  bonus)
+    make bonus
+    make bonus-test
+    make audit
+    ;;
+  full)
+    make up
+    make test
+    make audit
+    make bonus
+    make bonus-test
+    make audit
+    ;;
+  audit)
+    make audit
+    ;;
+esac
