@@ -25,14 +25,14 @@ password=$(tr -d '\r\n' < /run/secrets/redis_password)
 # deliberately stores credentials as 0600, so the entrypoint reads the secret
 # while privileged, publishes only the derived Redis ACL into tmpfs, and then
 # permanently drops to the redis account before starting the daemon.
-chown redis:redis /run/redis
 chmod 0700 /run/redis
+chown redis:redis /run/redis
 printf '%s\n' \
   'user default off' \
   "user wordpress on >$password ~* +@read +@write +@connection +@scripting +ping +info -flushall -flushdb -config -acl -shutdown -module -replicaof -slaveof -save -bgsave" \
   > /run/redis/users.acl
-chown redis:redis /run/redis/users.acl
 chmod 0400 /run/redis/users.acl
+chown redis:redis /run/redis/users.acl
 unset password
 
 exec gosu redis "$@"
