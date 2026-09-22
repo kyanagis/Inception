@@ -2,6 +2,11 @@ name: Released OVA Import Smoke
 
 on:
   workflow_dispatch:
+  workflow_run:
+    workflows:
+      - "Build Universal Inception OVA"
+    types:
+      - completed
   push:
     branches:
       - main
@@ -17,6 +22,7 @@ permissions:
 
 jobs:
   import:
+    if: github.event_name != 'workflow_run' || github.event.workflow_run.conclusion == 'success'
     runs-on: ubuntu-24.04
     timeout-minutes: 90
     steps:
