@@ -146,15 +146,20 @@ if [ ! -f "$state/complete" ]; then
     mv "$state/complete.tmp" "$state/complete"
 fi
 mkdir -p "$html/wp-content/uploads"
-# redis-cache and its drop-in were deliberately writable by www-data for the
-# preceding wp CLI operation.  Return their ownership without a subsequent
-# chmod: after a CHOWN operation the restricted container lacks CAP_FOWNER,
-# and Docker's NixOS tmpfs/user-namespace setup rejects that redundant chmod.
-# Their modes are already constrained by the bundled plugin and wp CLI.
+# The entrypoint uses umask 077.  The initial cp -R therefore creates the
+# bundled Redis plugin as 0700/0600.  While www-data owns the plugin it can
+# normalize its own modes without CAP_FOWNER; only then return ownership to
+# root.  Reversing this order makes the next wp CLI invocation unable to load
+# the plugin and the "wp redis" command disappears.
 redis_dropin="$html/wp-content/object-cache.php"
-find "$redis_plugin" -xdev -exec chown root:www-data {} +
+find "$redis_plugin" -xdev -type d -exec runuser -u www-data -- chmod 0755 {} +
+find "$redis_plugin" -xdev -type f -exec runuser -u www-data -- chmod 0644 {} +
 if [ -e "$redis_dropin" ] || [ -L "$redis_dropin" ]; then
     [ -f "$redis_dropin" ] && [ ! -L "$redis_dropin" ] || fail "Unsafe Redis object-cache drop-in"
+    runuser -u www-data -- chmod 0644 "$redis_dropin"
+fi
+find "$redis_plugin" -xdev -exec chown root:www-data {} +
+if [ -f "$redis_dropin" ]; then
     chown root:www-data "$redis_dropin"
 fi
 find "$html" -xdev \( -path "$redis_plugin" -o -path "$redis_dropin" \) -prune -o \
