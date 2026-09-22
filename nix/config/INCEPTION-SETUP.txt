@@ -1,97 +1,72 @@
-Inception Universal OVA 利用手順
-=================================
+Inception x86_64 Universal OVA
+============================
 
 このOVAは特定のsubmit commitを内包・固定しません。
-通常のsubmit変更ではOVAを作り直さず、実行時にcurrent submitを取得します。
+VirtualBoxへ一度importした後、通常のsubmit変更ではOVAを再生成しません。
 
-1. 初回OS設定
--------------
+1. 初回設定
+-----------
 
-OS accountは inception、初期passwordも inception です。
-Terminal（Win+Enter）を開き、最初にpasswordを変更してください。
+OS account: inception
+初期password: inception
+
+最初にpasswordを変更し、42 loginを設定します。
 
     passwd
-
-42 loginを設定します。
-
     inception-setup YOUR_42_LOGIN
 
-これにより以下が設定されます。
+2. cloneして起動
+---------------
 
-    /home/YOUR_42_LOGIN/data
-    YOUR_42_LOGIN.42.fr
-    INCEPTION_LOGIN
-    DOMAIN_NAME
-    INCEPTION_DATA_DIR
+    cd /home/inception
+    git clone --branch submit --single-branch \
+      https://github.com/kyanagis/Inception.git Inception
+    cd Inception
+    make
 
-設定後は新しいTerminalを開いてください。
+これだけでOVAのidentityを読み、srcs/.envを生成し、host ABIを確認して
+mandatory stackを起動します。make host-setupはOVA内では実行しません。
 
-2. current submitを取得・検証
------------------------------
+確認:
 
-推奨:
-
-    inception-evaluate --prepare
-
-このcommandは /home/inception/Inception-submit をcloneまたは安全にfast-forwardし、
-current submit branchに対してmake configure、make doctor、make checkを実行します。
-
-特定commitへのtest固定はありません。現在使用中のcommitは次で確認できます。
-
-    git -C /home/inception/Inception-submit rev-parse HEAD
-
-3. mandatoryを完全検証
-----------------------
-
-    inception-evaluate --mandatory
-
-内部では current submit に対して:
-
-    make configure
-    make doctor
-    make check
-    make up
     make test
-    make audit
+    make status
 
-を実行します。
+3. 完全評価
+-----------
 
-4. bonusを完全検証
-------------------
-
-    inception-evaluate --bonus
-
-または mandatory -> bonus の両方:
+OVA管理のdisposable checkoutでcurrent submitを完全評価する場合:
 
     inception-evaluate --full
 
-bonusではRedis、FTPS、Adminer、static site、backupまで実測します。
+project内部の評価手順はsubmit/.inception/evaluateが所有します。
+そのためMakefileや内部script構成が変わってもOVA側を変更する必要はありません。
 
-5. 手動操作
------------
+4. host-level変更
+-----------------
 
-    cd /home/inception/Inception-submit
-    make status
-    make logs
-    make down
+kernel/Docker/firewall/host toolingなど、submitだけでは吸収できないhost capabilityが
+必要になった場合もOVAの再export/importは不要です。
 
-公開OVA内では make host-setup を実行しないでください。
-host bootstrapはinception-setupが管理します。
+    inception-host-update
 
-6. host toolのforward compatibility
------------------------------------
+またはsubmit側の .inception/host-abi が新しいABIを要求すると、makeが必要時だけ
+inception-host-update --ensure を呼びます。更新はcurrent mainの
+nixosConfigurations.inception-runtimeをnixos-rebuild switchで適用します。
 
-submit branchに .inception/host-tools がある場合、inception-evaluateは各commandを確認します。
-OVAにない通常のuserspace commandは対応するnixpkgs packageをephemeral nix shellで補完します。
+5. userspace依存
+----------------
 
-これによりDockerfile、Compose、script、test、通常のCLI依存追加のためにOVAを再生成する必要はありません。
+submit/.inception/host-tools に不足commandを宣言すると、inception-evaluateは
+ephemeral Nix shellで補完します。
 
-7. diagnostics
---------------
+6. 診断
+-------
 
     inception-audit
+    inception-evaluate --prepare
     ssh-setup --status
 
-Desktop/TROUBLESHOOTING-QA.txtも参照してください。
-
-submit-onlyの変更はSubmit Compatibility CIで検証され、通常はOVAの再生成を必要としません。
+再生成が必要になるのは、x86_64から別architectureへ変更する場合、VirtualBoxの
+仮想hardware定義そのものを変更する場合、またはguestがbootできないほどbootstrapを
+破壊した場合です。
