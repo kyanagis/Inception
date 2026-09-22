@@ -20,7 +20,8 @@ secret() {
 : "${WP_USER:?WP_USER required}"
 : "${WP_USER_EMAIL:?WP_USER_EMAIL required}"
 case "$MYSQL_DATABASE:$MYSQL_USER" in *[!A-Za-z0-9_:]*|:*|*:) fail "Invalid database identifiers";; esac
-case "$WP_ADMIN_USER:$WP_USER" in *[!A-Za-z0-9_:-]*|:*|*:) fail "Invalid WordPress usernames";; esac
+case "$WP_ADMIN_USER" in ''|*[!A-Za-z0-9_-]*) fail "Invalid WordPress administrator username";; esac
+case "$WP_USER" in ''|*[!A-Za-z0-9_-]*) fail "Invalid WordPress username";; esac
 case "$WP_ADMIN_USER" in *[Aa][Dd][Mm][Ii][Nn]*) fail "Administrator name must not contain admin";; esac
 [ "$WP_ADMIN_USER" != "$WP_USER" ] || fail "WordPress users must differ"
 case "$DOMAIN_NAME" in *[!a-z0-9.-]*|.*|*..*) fail "Invalid domain";; esac
