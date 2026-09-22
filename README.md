@@ -13,7 +13,7 @@ For a complete mandatory and bonus validation:
 
     inception-evaluate --full
 
-The OVA contains Docker/Compose, Nix, jq, Python, C/C++ build tools, GDB, strace, shellcheck, nmap, tcpdump, socat, Git, ripgrep, rsync, tmux, Firefox, VSCodium, Meld, Kitty, Vim, and the `inception-audit` hypothesis-driven diagnostic runner.
+The OVA contains Docker/Compose, Nix, jq, Python, C/C++ build tools, GDB, Valgrind, strace, ltrace, shellcheck, actionlint, hadolint, nmap, tcpdump, socat, netcat, Git/GitHub CLI, ripgrep, rsync, tmux, SQLite, Firefox, VSCodium, Meld, Kitty, Vim/Neovim/Helix, `inception-audit`, and the redacted `inception-diagnostics` collector.
 
 Ordinary future changes to the `submit` branch do not require rebuilding the appliance. The evaluator fast-forwards a clean local checkout to `origin/submit`. If a future revision needs another ordinary userspace command, `.inception/host-tools` can declare the command and a safe nixpkgs attribute; the evaluator supplies missing packages through an ephemeral Nix shell.
 
