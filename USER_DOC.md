@@ -16,15 +16,20 @@ make bonus は Redis、明示FTPS、静的サイト、Adminer、定期バック�
 
 公開OVAでは Docker daemon、Docker data-root、42用データディレクトリの切替機構がOS側に組み込まれています。make host-setup は実行しないでください。
 
-最初に42 loginを設定します。
+最初に42 loginを設定します。そのまま同じTerminalでcloneして起動できます。
 
     inception-setup YOUR_LOGIN
+    cd /home/inception
+    git clone --branch submit --single-branch       https://github.com/kyanagis/Inception.git Inception
+    cd Inception
+    make
+    make test
 
-新しいTerminalを開いて、次を確認します。
+make は /var/lib/inception/environment を自動で読み、ignoredな srcs/.env を生成します。
 
-    echo "$INCEPTION_LOGIN"
-    echo "$DOMAIN_NAME"
-    echo "$INCEPTION_DATA_DIR"
+確認:
+
+    cat /var/lib/inception/environment
     docker info --format '{{.DockerRootDir}}'
     readlink -f /home/inception/data/docker
 
@@ -36,25 +41,15 @@ YOUR_LOGIN=kyanagis の場合、期待される論理値は次です。
 
 DockerRootDirは /home/inception/data/docker と表示される場合がありますが、/home/inception/data は /home/kyanagis/data へ向く管理symlinkです。realpath後の実体は /home/kyanagis/data/docker になります。
 
-推奨手順は次です。
+OVAは特定のsubmit commitへ固定されていません。通常利用では上記の clone -> make を使います。
+
+自動評価用のdisposable checkoutを使う場合:
 
     inception-evaluate --prepare
+    inception-evaluate --full
 
-これは current submit branch を取得またはfast-forwardし、対象checkoutを構成し、doctor/checkを実行します。OVAは特定のsubmit commitへ固定されていません。
-
-手動で行う場合:
-
-    cd /home/inception
-    git clone --branch submit --single-branch       https://github.com/kyanagis/Inception.git Inception-submit
-    cd Inception-submit
-    make configure LOGIN="$INCEPTION_LOGIN"
-    make doctor
-    make check
-
-その後:
-
-    make up
-    make test
+evaluatorはcurrent submitへcheckoutを収束させ、project固有処理は
+submit/.inception/evaluateへ委譲します。
 
 ## 3. 初回起動: 汎用Debian VM
 
@@ -182,11 +177,18 @@ project container、project image、named volume dataを削除します。実行
 
 ## 11. OVAをsubmit変更から独立させる仕組み
 
-OVAには評価対象sourceを焼き込みません。inception-evaluate は毎回remote submitを参照します。
+OVAには評価対象sourceを焼き込みません。inception-evaluate はremote submitを参照し、
+disposable checkoutをcurrent origin/submitへ収束させます。
 
-submit branchの .inception/host-tools は command と nixpkgs package の安全な対応表です。将来、通常のuserspace依存が増えた場合はsubmit側だけでこのcontractを更新でき、OVA側にcommandがなければ evaluator が一時的なNix shellで補います。
+submit/.inception/evaluate がproject固有のstable ABI、.inception/host-tools が
+通常userspace command、.inception/host-abi がhost-level capabilityの最低versionを
+宣言します。不足userspace toolはephemeral Nix shellで補い、host ABI不足は
+inception-host-updateでcurrent mainのNixOS runtimeへin-place更新します。
 
-この仕組みで、Dockerfile、Compose、shell、WordPress設定、テスト、通常のCLI依存追加などのsubmit変更はOVA再生成理由になりません。カーネル機能、CPU architecture、VirtualBox hardware、root filesystem容量そのものを変更する要求は例外です。
+そのためDockerfile、Compose、shell、WordPress設定、テスト、通常CLI依存、さらに
+多くのhost daemon/firewall/kernel設定変更までOVA再importなしで吸収できます。
+OVA再生成が本当に必要なのはarchitectureやVirtualBox virtual hardware、disk image
+bootstrapそのものを変える場合です。
 
 ## 12. 障害時の基本原則
 
