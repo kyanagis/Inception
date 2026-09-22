@@ -92,11 +92,18 @@ jobs:
         if: always()
         shell: bash
         run: |
-          git rev-parse HEAD || true
-          docker info --format 'DockerRootDir={{.DockerRootDir}}' || true
-          docker compose --env-file srcs/.env -f srcs/docker-compose.yml --profile bonus ps || true
-          docker ps --filter label=com.docker.compose.project=inception \
-            --format 'table {{.Names}}\t{{.Status}}\t{{.Ports}}' || true
+          set +e
+          git rev-parse HEAD
+          docker info --format 'DockerRootDir={{.DockerRootDir}}'
+          docker compose --env-file srcs/.env -f srcs/docker-compose.yml --profile bonus ps
+          docker ps -a --filter label=com.docker.compose.project=inception \
+            --format 'table {{.Names}}\t{{.Status}}\t{{.Ports}}'
+          echo '--- redacted container logs ---'
+          docker compose --env-file srcs/.env -f srcs/docker-compose.yml --profile bonus logs \
+            --no-color --tail=200 2>&1 | sed -E \
+            -e 's/[0-9a-fA-F]{64}/<redacted-hex64>/g' \
+            -e 's/((password|passwd|secret)[=:])[[:graph:]]+/\\1<redacted>/Ig' \
+            -e 's#(BEGIN (RSA |EC |OPENSSH )?PRIVATE KEY).*#<redacted-private-key>#g'
 
       - name: Cleanup
         if: always()
