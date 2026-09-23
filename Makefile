@@ -3,7 +3,7 @@ COMPOSE := docker --host unix:///var/run/docker.sock compose --env-file srcs/.en
 export LOGIN
 .DEFAULT_GOAL := all
 .NOTPARALLEL:
-.PHONY: all host-ready auto-configure host-setup configure preflight doctor setup config build bonus-build up bonus down stop start restart status logs check audit test bonus-test backup-now backup-list backup-verify clean fclean re help
+.PHONY: all host-ready auto-configure host-setup configure preflight doctor setup config build bonus-build up bonus down stop start restart status logs check audit dependency-audit test bonus-test backup-now backup-list backup-verify clean fclean re help
 
 all: up
 
@@ -82,6 +82,9 @@ check:
 
 audit:
 	@sh ./srcs/tools/security-audit.sh
+
+dependency-audit:
+	@sh ./srcs/tools/dependency-audit.sh
 
 test: up
 	@./srcs/tools/check.sh
