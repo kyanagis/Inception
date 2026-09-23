@@ -47,6 +47,8 @@ SystemLog /run/proftpd/proftpd.log
 TransferLog /run/proftpd/proftpd-xfer.log
 ControlsEngine off
 DelayEngine off
+CapabilitiesEngine off
+WtmpLog off
 UseReverseDNS off
 RequireValidShell off
 DefaultRoot ~
