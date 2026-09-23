@@ -25,9 +25,11 @@ Usage:
   inception-host-update
   inception-host-update --ensure ABI
 
-Without --ensure, update the running x86_64 NixOS guest to the current main
-runtime configuration. With --ensure, do nothing when the installed host ABI
-is already new enough; otherwise update and verify the requested ABI.
+Without --ensure, update the running x86_64 NixOS guest to the immutable
+commit named by INCEPTION_HOST_REPO_REF. With --ensure, do nothing when the
+installed host ABI is already new enough; otherwise update and verify the
+requested ABI. Privileged host updates intentionally reject mutable branch or
+tag names.
 EOF
     exit 0
     ;;
@@ -59,13 +61,20 @@ if [[ -n "$required_abi" && "$current_abi" -ge "$required_abi" ]]; then
 fi
 
 remote=${INCEPTION_HOST_REPO_URL:-https://github.com/kyanagis/Inception.git}
-ref=${INCEPTION_HOST_REPO_REF:-main}
+ref=${INCEPTION_HOST_REPO_REF:-}
+[[ "$ref" =~ ^[0-9a-f]{40}$ ]] ||
+  fail 'refusing privileged update from a mutable ref; set INCEPTION_HOST_REPO_REF to a full 40-hex commit SHA'
+
 work=$(mktemp -d)
 trap 'rm -rf "$work"' EXIT HUP INT TERM
 
-printf 'Fetching host runtime %s from %s...\n' "$ref" "$remote"
-git clone --filter=blob:none --depth 1 --branch "$ref" --single-branch "$remote" "$work/source" >/dev/null
-sha=$(git -C "$work/source" rev-parse HEAD)
+printf 'Fetching immutable host runtime %s from %s...\n' "$ref" "$remote"
+git init -q "$work/source"
+git -C "$work/source" remote add origin "$remote"
+git -C "$work/source" fetch --quiet --depth 1 origin "$ref"
+sha=$(git -C "$work/source" rev-parse FETCH_HEAD)
+[[ "$sha" == "$ref" ]] || fail "fetched host commit $sha does not match requested $ref"
+git -C "$work/source" checkout --quiet --detach "$sha"
 printf 'Host source commit: %s\n' "$sha"
 
 nix --extra-experimental-features 'nix-command flakes'   build --no-link "path:$work/source#nixosConfigurations.inception-runtime.config.system.build.toplevel"
