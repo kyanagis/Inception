@@ -125,7 +125,7 @@ let
           done
         fi
         if [ "$switched" -ne 1 ]; then
-          echo "Expected Docker data-root $docker_target but observed ${observed_root:-unavailable}; rolling back" >&2
+          echo "Expected Docker data-root $docker_target but observed ''${observed_root:-unavailable}; rolling back" >&2
           systemctl stop docker.service docker.socket || true
           rm -f "$bootstrap_home/data"
           ln -s ${loginStateDirectory}/bootstrap-data "$bootstrap_home/data"
