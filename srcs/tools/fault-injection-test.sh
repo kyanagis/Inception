@@ -82,8 +82,8 @@ MYSQL_BACKUP_USER=$(sed -n 's/^MYSQL_BACKUP_USER=//p' srcs/.env)
 [ -n "$MYSQL_DATABASE" ] && [ -n "$MYSQL_USER" ] && [ -n "$MYSQL_BACKUP_USER" ] ||
   fail 'database identifiers missing for isolated bootstrap fault test'
 
-fault_volume="inception-fault-mariadb-$"
-fault_container="inception-fault-mariadb-$"
+fault_volume="inception-fault-mariadb-$$"
+fault_container="inception-fault-mariadb-$$"
 docker volume create "$fault_volume" >/dev/null
 cleanup_fault_db() {
   docker rm -f "$fault_container" >/dev/null 2>&1 || true
