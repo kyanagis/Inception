@@ -6,32 +6,51 @@ fail() {
   exit 1
 }
 
-# Nix store binaries cannot be setuid.  Do not rely on PATH here: the
-# writeShellApplication runtime-input PATH contains a store copy of sudo
-# before /run/wrappers/bin.  The NixOS wrapper is the privileged interface.
 sudo_wrapper=/run/wrappers/bin/sudo
 [[ -x "$sudo_wrapper" ]] || fail 'NixOS sudo wrapper is unavailable'
 
+remote=https://github.com/kyanagis/Inception.git
 required_abi=
+target_commit=
+
+usage() {
+  cat <<'EOF'
+Usage:
+  inception-host-update --ensure ABI [COMMIT]
+  inception-host-update --commit COMMIT
+
+--ensure exits immediately when the installed host ABI is already new enough.
+When an update is required, COMMIT must be an immutable 40-hex Git commit.
+--commit always converges the host runtime to the specified commit.
+
+The privileged update path intentionally does not accept a repository URL,
+branch name, tag, or environment override.
+EOF
+}
+
 case "${1:-}" in
   --ensure)
     shift
-    [[ $# -eq 1 && "$1" =~ ^[0-9]+$ ]] || fail 'usage: inception-host-update --ensure ABI'
+    [[ $# -ge 1 && $# -le 2 && "$1" =~ ^[0-9]+$ ]] ||
+      fail 'usage: inception-host-update --ensure ABI [COMMIT]'
     required_abi=$1
+    shift
+    if (($#)); then
+      target_commit=$1
+    fi
+    ;;
+  --commit)
+    shift
+    [[ $# -eq 1 ]] || fail 'usage: inception-host-update --commit COMMIT'
+    target_commit=$1
     ;;
   --help|-h)
-    cat <<'EOF'
-Usage:
-  inception-host-update
-  inception-host-update --ensure ABI
-
-Without --ensure, update the running x86_64 NixOS guest to the current main
-runtime configuration. With --ensure, do nothing when the installed host ABI
-is already new enough; otherwise update and verify the requested ABI.
-EOF
+    usage
     exit 0
     ;;
   '')
+    usage >&2
+    exit 2
     ;;
   *)
     fail "unknown argument: $1"
@@ -58,21 +77,28 @@ if [[ -n "$required_abi" && "$current_abi" -ge "$required_abi" ]]; then
   exit 0
 fi
 
-remote=${INCEPTION_HOST_REPO_URL:-https://github.com/kyanagis/Inception.git}
-ref=${INCEPTION_HOST_REPO_REF:-main}
+[[ "$target_commit" =~ ^[0-9a-f]{40}$ ]] ||
+  fail 'an immutable 40-hex host source commit is required for host updates'
+
 work=$(mktemp -d)
 trap 'rm -rf "$work"' EXIT HUP INT TERM
 
-printf 'Fetching host runtime %s from %s...\n' "$ref" "$remote"
-git clone --filter=blob:none --depth 1 --branch "$ref" --single-branch "$remote" "$work/source" >/dev/null
+printf 'Fetching immutable host runtime %s from %s...\n' "$target_commit" "$remote"
+git -C "$work" init -q source
+git -C "$work/source" remote add origin "$remote"
+git -C "$work/source" fetch -q --depth 1 origin "$target_commit"
+git -C "$work/source" checkout -q --detach FETCH_HEAD
 sha=$(git -C "$work/source" rev-parse HEAD)
+[[ "$sha" == "$target_commit" ]] || fail "fetched commit mismatch: expected $target_commit, got $sha"
 printf 'Host source commit: %s\n' "$sha"
 
-nix --extra-experimental-features 'nix-command flakes'   build --no-link "path:$work/source#nixosConfigurations.inception-runtime.config.system.build.toplevel"
+nix --extra-experimental-features 'nix-command flakes' \
+  build --no-link "path:$work/source#nixosConfigurations.inception-runtime.config.system.build.toplevel"
 
 "$sudo_wrapper" -v
 old_system=$(readlink -f /run/current-system)
-if ! "$sudo_wrapper" /run/current-system/sw/bin/nixos-rebuild switch     --flake "path:$work/source#inception-runtime"; then
+if ! "$sudo_wrapper" /run/current-system/sw/bin/nixos-rebuild switch \
+    --flake "path:$work/source#inception-runtime"; then
   printf 'Host activation failed; attempting rollback to %s\n' "$old_system" >&2
   "$sudo_wrapper" "$old_system/bin/switch-to-configuration" switch || true
   exit 1
@@ -84,7 +110,7 @@ if [[ -r /etc/inception-host-abi ]]; then
 fi
 [[ "$new_abi" =~ ^[0-9]+$ ]] || fail 'updated host has an invalid ABI marker'
 if [[ -n "$required_abi" && "$new_abi" -lt "$required_abi" ]]; then
-  printf 'Updated main provides host ABI %s, but submit requires %s. Rolling back.\n' "$new_abi" "$required_abi" >&2
+  printf 'Pinned host commit provides ABI %s, but submit requires %s. Rolling back.\n' "$new_abi" "$required_abi" >&2
   "$sudo_wrapper" "$old_system/bin/switch-to-configuration" switch || true
   exit 1
 fi
