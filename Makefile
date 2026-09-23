@@ -10,12 +10,15 @@ all: up
 host-ready:
 	@set -eu; \
 	if command -v inception-host-update >/dev/null 2>&1 && [ -f .inception/host-abi ]; then \
-	  expected=$(tr -d '[:space:]' < .inception/host-abi); \
-	  host_ref=$(tr -d '[:space:]' < .inception/host-source 2>/dev/null || true); \
-	  if [ -n "$host_ref" ]; then INCEPTION_HOST_REPO_REF="$host_ref" inception-host-update --ensure "$expected"; \
-	  else inception-host-update --ensure "$expected"; fi; \
+	  expected=$$(tr -d '[:space:]' < .inception/host-abi); \
+	  installed=$$(tr -d '[:space:]' < /etc/inception-host-abi 2>/dev/null || printf 0); \
+	  host_ref=$$(tr -d '[:space:]' < .inception/host-source 2>/dev/null || true); \
+	  if [ "$$installed" -lt 9 ]; then \
+	    inception-host-update --ensure "$$expected"; \
+	  elif [ -n "$$host_ref" ]; then \
+	    INCEPTION_HOST_REPO_REF="$$host_ref" inception-host-update --ensure "$$expected"; \
+	  else inception-host-update --ensure "$$expected"; fi; \
 	fi
-
 auto-configure: host-ready
 	@set -eu; \
 	login="$${LOGIN:-$${INCEPTION_LOGIN:-}}"; \
