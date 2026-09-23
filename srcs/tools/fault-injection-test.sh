@@ -24,7 +24,7 @@ wait_healthy() {
 
 # Converge to the mandatory topology first so the final smoke test has a
 # deterministic service set even when the caller previously exercised bonus.
-WP_REDIS_DISABLED=1 WP_REDIS_DISABLED=1 $compose up --detach --no-build --remove-orphans --wait --wait-timeout 180 mariadb wordpress nginx >/dev/null
+WP_REDIS_DISABLED=1 $compose up --detach --no-build --remove-orphans --wait --wait-timeout 180 mariadb wordpress nginx >/dev/null
 $bonus_compose stop redis ftp static-site adminer backup >/dev/null 2>&1 || true
 
 # Abrupt process death must converge through the normal restart policy.
@@ -48,7 +48,7 @@ $compose run --rm --no-deps --entrypoint sh wordpress -ec '
   rm -f /var/www/.inception-state/complete
 ' >/dev/null
 
-$compose up --detach --no-build --remove-orphans --wait --wait-timeout 180 mariadb wordpress nginx >/dev/null
+WP_REDIS_DISABLED=1 $compose up --detach --no-build --remove-orphans --wait --wait-timeout 180 mariadb wordpress nginx >/dev/null
 ./srcs/tools/smoke-test.sh
 $compose exec -T wordpress test -f /var/www/.inception-state/complete
 $compose exec -T wordpress test ! -e /var/www/.inception-wordpress || fail 'stale WordPress staging directory survived recovery'
