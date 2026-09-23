@@ -20,10 +20,7 @@ let
   # It must therefore be the learner path itself, rather than a stable path
   # which happens to resolve through a symlink.  The service wrapper reads the
   # root prepared by inception-docker-data-link before every daemon start.
-  dockerDaemon = pkgs.writeShellApplication {
-    name = "inception-dockerd";
-    runtimeInputs = with pkgs; [ coreutils ];
-    text = ''
+  dockerDaemon = pkgs.writeShellScript "inception-dockerd" ''
       set -euo pipefail
 
       state_directory=${loginStateDirectory}
@@ -49,10 +46,9 @@ let
           ;;
       esac
 
-      install -d -o root -g root -m 0710 "$docker_root"
+      ${pkgs.coreutils}/bin/install -d -o root -g root -m 0710 "$docker_root"
       exec ${pkgs.docker}/bin/dockerd --data-root "$docker_root"
     '';
-  };
 
   applyLogin = pkgs.writeShellApplication {
     name = "inception-apply-login";
@@ -464,7 +460,7 @@ in
     };
     services.docker.serviceConfig.ExecStart = lib.mkForce [
       ""
-      "${dockerDaemon}/bin/inception-dockerd"
+      "${dockerDaemon}"
     ];
     services.inception-login-state = {
       description = "Restore the configured Inception 42 login";
