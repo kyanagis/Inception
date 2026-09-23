@@ -3,8 +3,12 @@ name: Build Universal Inception OVA
 on:
   workflow_dispatch:
   push:
+    branches:
+      - main
     tags:
       - "v*"
+    paths:
+      - ".github/workflows/ova.yml"
 
 concurrency:
   group: ova-${{ github.workflow }}-${{ github.ref }}
