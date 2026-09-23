@@ -36,7 +36,7 @@ pkgs.testers.runNixOSTest {
     machine.succeed("su - ${userName} -c 'docker compose version'")
     machine.succeed("for cmd in jq python3 ip shellcheck git make curl openssl nmap tcpdump inception-evaluate inception-audit inception-host-update; do command -v \"$cmd\"; done")
     machine.succeed("test $(uname -m) = x86_64")
-    machine.succeed("grep -Fx 12 /etc/inception-host-abi")
+    machine.succeed("grep -Fx 13 /etc/inception-host-abi")
     machine.succeed("test -x /lib64/ld-linux-x86-64.so.2")
     machine.succeed("test $(cat /etc/inception-kernel-version) = $(uname -r)")
     machine.succeed("inception-evaluate --help")
