@@ -41,6 +41,41 @@ printf '%s\n' "$static_port" | grep -Fx '127.0.0.1:8081' >/dev/null || fail 'Sta
 curl --fail --silent --show-error http://127.0.0.1:8080/ >/dev/null
 curl --fail --silent --show-error http://127.0.0.1:8081/ >/dev/null
 $compose exec -T redis /usr/local/bin/redis-healthcheck
+
+# Exercise the Redis ACL as an attacker would.  The application account must
+# work for the object-cache commands it needs, but administrative commands and
+# script-based attempts to reach them must fail at runtime.
+$compose exec -T redis sh -ec '
+  set -eu
+  password=$(tr -d "\r\n" < /run/secrets/redis_password)
+
+  unauth=$(redis-cli --raw PING 2>&1 || true)
+  printf "%s\n" "$unauth" | grep -Eq "NOAUTH|Authentication required" || {
+    echo "Redis unexpectedly accepted an unauthenticated command" >&2
+    exit 1
+  }
+
+  expect_noperm() {
+    output=$(REDISCLI_AUTH="$password" redis-cli --user wordpress --raw "$@" 2>&1 || true)
+    printf "%s\n" "$output" | grep -F NOPERM >/dev/null || {
+      printf "Redis ACL unexpectedly allowed:" >&2
+      printf " %s" "$@" >&2
+      printf "\nresponse: %s\n" "$output" >&2
+      exit 1
+    }
+  }
+
+  expect_noperm CONFIG GET dir
+  expect_noperm ACL WHOAMI
+  expect_noperm MODULE LIST
+
+  scripted=$(REDISCLI_AUTH="$password" redis-cli --user wordpress --raw \
+    EVAL "return redis.call('''CONFIG''','''GET''','''dir''')" 0 2>&1 || true)
+  printf "%s\n" "$scripted" | grep -F NOPERM >/dev/null || {
+    echo "Redis EVAL unexpectedly bypassed the ACL command boundary" >&2
+    exit 1
+  }
+'
 $compose exec -T wordpress sh -ec '
   plugin=/var/www/html/wp-content/plugins/redis-cache
   test "$(stat -c %U:%G "$plugin")" = root:www-data
