@@ -190,6 +190,7 @@ jobs:
           - import once into VirtualBox; ordinary submit changes do not require re-export
           - clone current submit and run make; runtime env is generated automatically
           - submit source is fetched at runtime and is not baked into the image
+          - named-volume Mountpoints are exposed exactly below /home/<42-login>/data/docker
           - inception-host-update: self-update the NixOS guest from current main
           - inception-evaluate: update/prepare/mandatory/bonus/full/audit modes
           - inception-audit: host and repository hypothesis-driven audit
@@ -263,7 +264,8 @@ jobs:
           ```bash
           inception-setup YOUR_42_LOGIN
 
-          cd /home/inception
+          mkdir ~/inception-evaluation
+          cd ~/inception-evaluation
           git clone --branch submit --single-branch \
             https://github.com/kyanagis/Inception.git Inception
 
@@ -271,6 +273,9 @@ jobs:
           make
           make test
           ```
+
+          評価シートに従いclone先は新規の空ディレクトリです。`/home/YOUR_42_LOGIN/data`は
+          WordPress/MariaDBの永続データ専用で、Docker volume inspectでもこのパス以下が表示されます。
 
           通常の`submit`変更ではOVAを焼き直す必要はありません。
           project固有の処理は`submit/.inception/evaluate`側に置き、userspace tool不足はNix、host capability不足は`inception-host-update`で追従できるようにしています。
