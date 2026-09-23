@@ -49,7 +49,7 @@ $compose exec -T backup sh -ec '
   set -eu
   restore=$(mktemp -d /tmp/inception-restore.XXXXXXXX)
   trap "rm -rf \"$restore\"" EXIT HUP INT TERM
-  tar -xzf "/backups/$1/wordpress.tar.gz" -C "$restore"
+  tar --extract --gzip --no-same-owner --file="/backups/$1/wordpress.tar.gz" --directory="$restore"
   test -f "$restore/wp-settings.php"
   test -f "$restore/wp-includes/version.php"
   test -d "$restore/wp-content"
