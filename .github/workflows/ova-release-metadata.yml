@@ -2,6 +2,11 @@ name: Refresh OVA Release Metadata
 
 on:
   workflow_dispatch:
+  workflow_run:
+    workflows:
+      - "Build Universal Inception OVA"
+    types:
+      - completed
   push:
     branches:
       - main
@@ -13,6 +18,7 @@ permissions:
 
 jobs:
   refresh:
+    if: github.event_name != 'workflow_run' || github.event.workflow_run.conclusion == 'success'
     runs-on: ubuntu-24.04
     timeout-minutes: 10
     steps:
