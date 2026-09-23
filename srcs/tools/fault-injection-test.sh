@@ -45,6 +45,6 @@ $compose run --rm --no-deps --entrypoint sh wordpress -ec '
 $compose up --detach --no-build --remove-orphans --wait --wait-timeout 180 mariadb wordpress nginx >/dev/null
 ./srcs/tools/smoke-test.sh
 $compose exec -T wordpress test -f /var/www/.inception-state/complete
-[ ! -e "$($compose exec -T wordpress sh -ec 'test -e /var/www/.inception-wordpress && printf present || true')" ] 2>/dev/null || true
+$compose exec -T wordpress test ! -e /var/www/.inception-wordpress || fail 'stale WordPress staging directory survived recovery'
 
 printf '%s\n' 'Crash and partial-state recovery tests passed.'
