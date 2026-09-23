@@ -82,7 +82,7 @@ make down
 
 `make audit` checks declared and runtime security boundaries such as privileged mode, host namespaces, backend port publication, credential handling, read-only root filesystems, `no-new-privileges`, and Docker storage pressure.
 
-`make dependency-audit` verifies that the pinned WordPress release is still reported by upstream as current and that the downloaded archive matches the pinned SHA-256.
+`make dependency-audit` verifies upstream freshness and pinned integrity for WordPress Core, WP-CLI, Redis Object Cache, and Adminer. WordPress/WordPress.org archives are re-hashed, while GitHub release assets are checked against the official published asset digests where available.
 
 ### Bonus lifecycle
 
