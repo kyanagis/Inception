@@ -377,6 +377,28 @@ jobs:
             exit 1
           fi
 
+          # SSH is intentionally available before the multi-user target has
+          # finished restarting Docker and LightDM.  Do not confuse transport
+          # readiness with the evaluator-facing service readiness contract.
+          services_ready=0
+          for attempt in $(seq 1 180); do
+            if ssh "${ssh_opts[@]}" inception@127.0.0.1 '
+              systemctl is-active --quiet docker.service &&
+              systemctl is-active --quiet display-manager.service &&
+              docker info >/dev/null
+            ' >/dev/null 2>&1; then
+              services_ready=1
+              break
+            fi
+            sleep 1
+          done
+          if [ "$services_ready" -ne 1 ]; then
+            echo "Guest services did not become ready after graceful reboot" >&2
+            dump_state
+            cat "$serial" >&2 || true
+            exit 1
+          fi
+
           ssh "${ssh_opts[@]}" inception@127.0.0.1 '
             set -euo pipefail
             test "$(hostname)" = smoke42.42.fr

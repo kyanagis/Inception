@@ -1,0 +1,73 @@
+name: Refresh OVA Release Metadata
+
+on:
+  workflow_dispatch:
+  push:
+    branches:
+      - main
+    paths:
+      - ".github/workflows/ova-release-metadata.yml"
+
+permissions:
+  contents: write
+
+jobs:
+  refresh:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 10
+    steps:
+      - name: Download published provenance and checksum
+        shell: bash
+        env:
+          GH_TOKEN: ${{ github.token }}
+          GH_REPO: ${{ github.repository }}
+        run: |
+          set -euo pipefail
+          mkdir release-assets
+          gh release download ova-latest --repo "$GH_REPO" --dir release-assets \
+            --pattern BUILD-PROVENANCE.txt --pattern SHA256SUMS
+          source_sha="$(sed -n 's/^OVA source commit: //p' release-assets/BUILD-PROVENANCE.txt)"
+          submit_sha="$(sed -n 's/^Compatibility-tested submit commit: //p' release-assets/BUILD-PROVENANCE.txt)"
+          ova_sha="$(awk '$2 == "inception.ova" {print $1}' release-assets/SHA256SUMS)"
+          test -n "$source_sha"
+          test -n "$submit_sha"
+          test -n "$ova_sha"
+          printf '%s\n' "$source_sha" > source_sha
+          printf '%s\n' "$submit_sha" > submit_sha
+          printf '%s\n' "$ova_sha" > ova_sha
+
+      - name: Publish Japanese release description
+        shell: bash
+        env:
+          GH_TOKEN: ${{ github.token }}
+          GH_REPO: ${{ github.repository }}
+        run: |
+          set -euo pipefail
+          source_sha="$(cat source_sha)"
+          submit_sha="$(cat submit_sha)"
+          ova_sha="$(cat ova_sha)"
+          {
+            printf '%s\n\n' '42 Inceptionの評価用 x86_64 NixOS / VirtualBoxアプライアンスです。'
+            printf '%s\n\n' 'このOVAには評価対象のsourceを同梱していません。import後にcurrent `submit`をcloneして`make`してください。'
+            printf '%s\n' '```bash'
+            printf '%s\n' 'inception-setup YOUR_42_LOGIN'
+            printf '%s\n' 'cd /home/inception'
+            printf '%s\n' 'git clone --branch submit --single-branch https://github.com/kyanagis/Inception.git Inception'
+            printf '%s\n' 'cd Inception && make && make test'
+            printf '%s\n\n' '```'
+            printf '%s\n' '検証済み情報:'
+            printf '%s\n' "- OVA source commit: \`$source_sha\`"
+            printf '%s\n' "- 互換性確認済みsubmit: \`$submit_sha\`"
+            printf '%s\n' "- 結合後OVA SHA256: \`$ova_sha\`"
+            printf '%s\n' '- x86_64 / 4 vCPU / RAM 4 GiB / Xfce GUI'
+            printf '%s\n\n' '- VirtualBox import、boot、GUI、SSH、clone-and-make、mandatory、bonus、auditを検証'
+            printf '%s\n' '必要環境: VirtualBox 7.x、x86_64 CPU、RAM 4 GiB以上、空き容量35 GiB以上。'
+            printf '%s\n\n' 'GitHub Releaseの容量制限によりOVAは分割されています。'
+            printf '%s\n' '```bash'
+            printf '%s\n' 'cat inception.ova.part-* > inception.ova'
+            printf '%s\n' 'sha256sum --check --ignore-missing SHA256SUMS'
+            printf '%s\n' 'VBoxManage import inception.ova'
+            printf '%s\n' '```'
+          } > release-notes.md
+          gh release edit ova-latest --repo "$GH_REPO" \
+            --title 'Inception Universal OVA（最新版）' --notes-file release-notes.md
