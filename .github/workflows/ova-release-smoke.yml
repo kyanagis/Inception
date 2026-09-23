@@ -232,6 +232,9 @@ jobs:
           if ! ssh "${ssh_opts[@]}" inception@127.0.0.1 '
             set -euo pipefail
             printf "guest-abi=%s\n" "$(cat /etc/inception-host-abi)"
+            guest_abi="$(cat /etc/inception-host-abi)"
+            test "$guest_abi" -ge 13
+            test -x /lib64/ld-linux-x86-64.so.2
             test "$(uname -m)" = x86_64
             systemctl is-active docker.service
             systemctl is-active display-manager.service
