@@ -18,9 +18,12 @@ A. OVAはassessment sourceを内包しません。基本はcurrent submitを自�
 
 手動の場合:
 
-    cd /home/inception
+    mkdir ~/inception-evaluation
+    cd ~/inception-evaluation
     git clone --branch submit --single-branch \
       https://github.com/kyanagis/Inception.git Inception
+
+clone先は新規の空ディレクトリです。`/home/YOUR_LOGIN/data`は永続データ専用で、repositoryの配置場所ではありません。
 
 Q. submitが更新されたら新しいOVAが必要ですか。
 A. 通常は不要です。inception-evaluateのcheckoutはdisposableで、current origin/submitへ強制同期します。

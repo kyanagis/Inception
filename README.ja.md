@@ -8,13 +8,16 @@ Inceptionの評価・開発に使う x86_64 VirtualBox環境です。
 
     inception-setup YOUR_42_LOGIN
 
-    cd /home/inception
+    mkdir ~/inception-evaluation
+    cd ~/inception-evaluation
     git clone --branch submit --single-branch \
       https://github.com/kyanagis/Inception.git Inception
     cd Inception
     make
 
-`make`はOVAに保存された42 loginを読み、runtime用`srcs/.env`を生成してmandatory stackを起動します。
+評価シートに従いclone先は新規の空ディレクトリです。repositoryの配置場所は固定ではなく、
+`/home/YOUR_42_LOGIN/data`はWordPress/MariaDBの永続データ専用です。`make`はOVAに保存された
+42 loginを読み、runtime用`srcs/.env`を生成してmandatory stackを起動します。
 
 完全検証:
 
