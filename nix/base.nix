@@ -360,6 +360,11 @@ in
   };
 
   programs = {
+    # VS Code Remote-SSH installs upstream dynamically linked Node.js under
+    # ~/.vscode-server. NixOS does not expose a conventional ELF interpreter
+    # by default, so enable nix-ld for that compatibility boundary.
+    nix-ld.enable = true;
+
     bash.interactiveShellInit = ''
       if [ -r ${loginStateDirectory}/environment ]; then
         set -a
