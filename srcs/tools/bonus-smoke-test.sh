@@ -70,7 +70,7 @@ $compose exec -T redis sh -ec '
   expect_noperm MODULE LIST
 
   scripted=$(REDISCLI_AUTH="$password" redis-cli --user wordpress --raw \
-    EVAL "return redis.call('''CONFIG''','''GET''','''dir''')" 0 2>&1 || true)
+    EVAL "return redis.call(\"CONFIG\",\"GET\",\"dir\")" 0 2>&1 || true)
   printf "%s\n" "$scripted" | grep -F NOPERM >/dev/null || {
     echo "Redis EVAL unexpectedly bypassed the ACL command boundary" >&2
     exit 1
