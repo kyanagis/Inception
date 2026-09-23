@@ -35,14 +35,14 @@ $compose exec -T backup sh -ec 'gzip -dc "/backups/$1/database.sql.gz"' sh "$lat
 
 restored_site=$($compose exec -T mariadb sh -ec '
   root=$(tr -d "\r\n" < /run/secrets/db_root_password)
-  mariadb -N -B -uroot -p"$root" "$1" -e "SELECT option_value FROM wp_options WHERE option_name = '''siteurl''' LIMIT 1"
+  mariadb -N -B -uroot -p"$root" "$1" -e "SELECT option_value FROM wp_options WHERE option_name = 0x7369746575726c LIMIT 1"
 ' sh "$restore_db")
 [ "$restored_site" = "https://$DOMAIN_NAME" ] ||
   fail "Restored database siteurl mismatch: $restored_site"
 
 $compose exec -T mariadb sh -ec '
   root=$(tr -d "\r\n" < /run/secrets/db_root_password)
-  mariadb -N -B -uroot -p"$root" "$1" -e "SHOW TABLES LIKE '''wp_options'''" | grep -Fx wp_options
+  test "$(mariadb -N -B -uroot -p"$root" "$1" -e "SELECT COUNT(*) FROM information_schema.tables WHERE table_schema = DATABASE() AND table_name = 0x77705f6f7074696f6e73")" = 1
 ' sh "$restore_db" >/dev/null || fail 'Restored database is missing wp_options'
 
 $compose exec -T backup sh -ec '
