@@ -114,6 +114,11 @@ let
       </property>
     </channel>
   '';
+  xfceHelpers = pkgs.writeText "inception-xfce-helpers.rc" ''
+    TerminalEmulator=xfce4-terminal
+    FileManager=Thunar
+    WebBrowser=firefox
+  '';
   mimeApps = pkgs.writeText "inception-mimeapps.list" ''
     [Default Applications]
     text/plain=org.xfce.mousepad.desktop
@@ -143,6 +148,24 @@ let
     Icon=org.xfce.mousepad
     Terminal=false
     Categories=Utility;TextEditor;
+  '';
+  guiContract = pkgs.runCommand "inception-gui-contract" {
+    nativeBuildInputs = [
+      pkgs.desktop-file-utils
+      pkgs.gnugrep
+    ];
+  } ''
+    set -eu
+    test -x ${pkgs.xfce4-terminal}/bin/xfce4-terminal
+    test -x ${pkgs.mousepad}/bin/mousepad
+    test -f ${pkgs.xfce4-terminal}/share/applications/xfce4-terminal.desktop
+    test -f ${pkgs.mousepad}/share/applications/org.xfce.mousepad.desktop
+    ${pkgs.desktop-file-utils}/bin/desktop-file-validate ${terminalLauncher}
+    ${pkgs.desktop-file-utils}/bin/desktop-file-validate ${editorLauncher}
+    grep -Fq 'TerminalEmulator=xfce4-terminal' ${xfceHelpers}
+    grep -Fq 'text/plain=org.xfce.mousepad.desktop' ${mimeApps}
+    grep -Fq '${pkgs.xfce4-terminal}/bin/xfce4-terminal' ${xfceShortcuts}
+    touch "$out"
   '';
   xfceSession = pkgs.writeShellScript "inception-xfce-session" ''
     # LightDM autologin can reach the X session before the per-user D-Bus
@@ -256,12 +279,16 @@ in
 
   environment.etc."xdg/xfce4/xfconf/xfce-perchannel-xml/xfce4-keyboard-shortcuts.xml".source =
     xfceShortcuts;
+  environment.etc."xdg/xfce4/helpers.rc".source = xfceHelpers;
   environment.etc."kitty/kitty.conf".source = kittyConf;
   environment.etc."vimrc".source = vimConf;
   environment.etc."zsh/inception.zshrc".source = zshConf;
 
+  system.build.inceptionGuiContract = guiContract;
+
   systemd.services.inception-user-config = {
     description = "Install Inception desktop guides and portable user configuration";
+    requiredBy = [ "display-manager.service" ];
     wantedBy = [ "multi-user.target" ];
     before = [ "display-manager.service" ];
     after = [ "local-fs.target" ];
@@ -273,7 +300,9 @@ in
       install -d -o ${userName} -g users -m 0755 /home/${userName}/.local/share
       install -d -o ${userName} -g users -m 0755 /home/${userName}/.local/state
       install -d -o ${userName} -g users -m 0755 /home/${userName}/.config/kitty
+      install -d -o ${userName} -g users -m 0755 /home/${userName}/.config/xfce4
       install -d -o ${userName} -g users -m 0755 /home/${userName}/Desktop
+      install -o ${userName} -g users -m 0644 ${xfceHelpers} /home/${userName}/.config/xfce4/helpers.rc
       install -o ${userName} -g users -m 0644 ${mimeApps} /home/${userName}/.config/mimeapps.list
       install -o ${userName} -g users -m 0755 ${terminalLauncher} /home/${userName}/Desktop/Terminal.desktop
       install -o ${userName} -g users -m 0755 ${editorLauncher} /home/${userName}/Desktop/Text-Editor.desktop

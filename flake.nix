@@ -65,6 +65,7 @@
       checks.${system} = {
         host = host.config.system.build.toplevel;
         vbox-system = vbox.config.system.build.toplevel;
+        gui-contract = vbox.config.system.build.inceptionGuiContract;
         boot = import ./nix/check.nix {
           inherit pkgs hostName userName;
         };
