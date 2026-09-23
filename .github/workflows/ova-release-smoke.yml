@@ -228,7 +228,7 @@ jobs:
             -o ServerAliveCountMax=8
           )
 
-          ssh "${ssh_opts[@]}" inception@127.0.0.1 '
+          if ! ssh "${ssh_opts[@]}" inception@127.0.0.1 '
             set -euo pipefail
             printf "guest-abi=%s\n" "$(cat /etc/inception-host-abi)"
             test "$(uname -m)" = x86_64
@@ -288,7 +288,41 @@ jobs:
             fi
 
             printf "first-pass-submit=%s\n" "$(git rev-parse HEAD)"
-          ' | tee "$GITHUB_WORKSPACE/release-assets/OVA-E2E.txt"
+          ' | tee "$GITHUB_WORKSPACE/release-assets/OVA-E2E.txt"; then
+            {
+              echo '--- guest failure diagnostics ---'
+              ssh "${ssh_opts[@]}" inception@127.0.0.1 '
+                set +e
+                cd /home/inception/Inception 2>/dev/null || exit 0
+                echo "HEAD=$(git rev-parse HEAD 2>/dev/null)"
+                echo "HOST_ABI=$(cat /etc/inception-host-abi 2>/dev/null)"
+                echo "DOCKER_ROOT=$(docker info --format "{{.DockerRootDir}}" 2>/dev/null)"
+                echo "--- df ---"
+                df -hT / /home/inception /home/smoke42/data 2>/dev/null
+                echo "--- compose ps ---"
+                docker compose --env-file srcs/.env -f srcs/docker-compose.yml --profile bonus ps -a 2>&1
+                echo "--- wordpress inspect ---"
+                wp_id="$(docker compose --env-file srcs/.env -f srcs/docker-compose.yml ps -aq wordpress 2>/dev/null)"
+                if [ -n "$wp_id" ]; then
+                  docker inspect --format "{{json .State}}" "$wp_id" 2>&1
+                  docker inspect --format "{{json .Mounts}}" "$wp_id" 2>&1
+                  docker inspect --format "{{json .HostConfig.Tmpfs}}" "$wp_id" 2>&1
+                  echo "--- wordpress health command ---"
+                  docker inspect --format "{{json .Config.Healthcheck}}" "$wp_id" 2>&1
+                  echo "--- wordpress logs ---"
+                  docker logs --tail 300 "$wp_id" 2>&1
+                  echo "--- wordpress volume state ---"
+                  docker exec "$wp_id" sh -c "id; stat -c \"%U:%G %u:%g %a %n\" /var/www /var/www/html /var/www/.inception-state /run/php 2>/dev/null; ls -la /var/www /var/www/.inception-state /run/php 2>/dev/null" 2>&1
+                fi
+                echo "--- mariadb logs ---"
+                db_id="$(docker compose --env-file srcs/.env -f srcs/docker-compose.yml ps -aq mariadb 2>/dev/null)"
+                [ -z "$db_id" ] || docker logs --tail 200 "$db_id" 2>&1
+                echo "--- docker daemon journal ---"
+                journalctl -u docker.service --no-pager -n 150 2>&1
+              '
+            } | tee "$GITHUB_WORKSPACE/release-assets/OVA-FAILURE-DIAGNOSTICS.txt"
+            exit 1
+          fi
 
           # Hard-reset the VM from the hypervisor to exercise persistence and
           # reboot recovery without granting broad passwordless sudo inside
@@ -321,6 +355,7 @@ jobs:
             release-assets/VBOX-IMPORT.txt
             release-assets/QEMU-BOOT.txt
             release-assets/OVA-E2E.txt
+            release-assets/OVA-FAILURE-DIAGNOSTICS.txt
             release-assets/QEMU-SERIAL.txt
             release-assets/QEMU-MONITOR.txt
             release-assets/QEMU-DISK.json
