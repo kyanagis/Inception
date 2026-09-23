@@ -11,8 +11,8 @@ done
 for document in README.md USER_DOC.md DEV_DOC.md; do
   [ -s "$document" ] || fail "Missing or empty $document"
 done
-grep -Fqx 'This project has been created as part of the 42 curriculum by kyanagis.' README.md ||
-  fail 'README lacks the required 42 curriculum attribution'
+test "$(head -n 1 README.md)" = '*This project has been created as part of the 42 curriculum by kyanagis.*' ||
+  fail 'README must start with the required 42 curriculum attribution'
 grep -Eq '^# Inception$' README.md || fail 'README lacks the project title'
 for heading in Description Instructions Resources; do
   grep -Eq "^##+ $heading$" README.md || fail "README lacks $heading"
