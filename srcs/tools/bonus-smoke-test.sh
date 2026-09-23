@@ -74,6 +74,123 @@ $compose exec -T --user www-data wordpress wp eval "
 timeout 15 openssl s_client -starttls ftp   -connect "127.0.0.1:$FTP_PORT"   -servername "$DOMAIN_NAME"   -verify_hostname "$DOMAIN_NAME"   -verify_return_error   -CAfile secrets/ftps_certificate.pem </dev/null >/dev/null 2>&1 ||
   fail 'FTPS TLS negotiation failed'
 
+# Prove the FTPS authorization boundary with authenticated operations, not
+# only with configuration inspection or a TLS handshake.
+DOMAIN_NAME="$DOMAIN_NAME" FTP_PORT="$FTP_PORT" FTP_USER="$(sed -n 's/^FTP_USER=//p' srcs/.env)" python3 - <<'PY'
+import ftplib
+import io
+import os
+import ssl
+import time
+import urllib.error
+import urllib.request
+
+domain = os.environ["DOMAIN_NAME"]
+port = int(os.environ["FTP_PORT"])
+user = os.environ["FTP_USER"]
+password = open("secrets/ftp_password.txt", "r", encoding="ascii").read().strip()
+cafile = "secrets/ftps_certificate.pem"
+ctx = ssl.create_default_context(cafile=cafile)
+probe = f"inception-ftps-{os.getpid()}-{int(time.time())}"
+payload = b"inception-ftps-write-boundary\n"
+
+def connect():
+    ftp = ftplib.FTP_TLS(context=ctx, timeout=10)
+    ftp.connect(domain, port)
+    ftp.login(user, password)
+    ftp.prot_p()
+    return ftp
+
+def expect_denied(path):
+    ftp = connect()
+    try:
+        try:
+            ftp.storbinary(f"STOR {path}", io.BytesIO(payload))
+        except ftplib.error_perm:
+            return
+        try:
+            ftp.delete(path)
+        except ftplib.all_errors:
+            pass
+        raise SystemExit(f"FTPS unexpectedly wrote protected path: {path}")
+    finally:
+        try:
+            ftp.quit()
+        except ftplib.all_errors:
+            ftp.close()
+
+upload = f"wp-content/uploads/{probe}.txt"
+ftp = connect()
+ftp.storbinary(f"STOR {upload}", io.BytesIO(payload))
+buf = io.BytesIO()
+ftp.retrbinary(f"RETR {upload}", buf.write)
+if buf.getvalue() != payload:
+    raise SystemExit("FTPS upload/readback mismatch")
+ftp.delete(upload)
+ftp.quit()
+
+for protected in (
+    f"{probe}.txt",
+    f"wp-content/plugins/{probe}.txt",
+    f"wp-content/themes/{probe}.txt",
+    f"wp-content/uploads/../../{probe}.txt",
+):
+    expect_denied(protected)
+
+source = f"wp-content/uploads/{probe}-rename.txt"
+target = f"wp-content/plugins/{probe}-rename.txt"
+ftp = connect()
+ftp.storbinary(f"STOR {source}", io.BytesIO(payload))
+try:
+    try:
+        ftp.rename(source, target)
+    except ftplib.error_perm:
+        pass
+    else:
+        try:
+            ftp.rename(target, source)
+        except ftplib.all_errors:
+            try:
+                ftp.delete(target)
+            except ftplib.all_errors:
+                pass
+        raise SystemExit("FTPS unexpectedly renamed an upload into a protected directory")
+finally:
+    try:
+        ftp.delete(source)
+    except ftplib.all_errors:
+        pass
+    try:
+        ftp.quit()
+    except ftplib.all_errors:
+        ftp.close()
+
+php_name = f"{probe}.php"
+php_path = f"wp-content/uploads/{php_name}"
+php_marker = f"<?php echo 'EXECUTED-{probe}'; ?>\n".encode()
+ftp = connect()
+ftp.storbinary(f"STOR {php_path}", io.BytesIO(php_marker))
+ftp.quit()
+
+url = f"https://{domain}/wp-content/uploads/{php_name}"
+https_ctx = ssl.create_default_context(cafile="secrets/tls_certificate.pem")
+try:
+    with urllib.request.urlopen(url, context=https_ctx, timeout=10) as response:
+        body = response.read()
+        status = response.status
+except urllib.error.HTTPError as exc:
+    body = exc.read()
+    status = exc.code
+if status != 403:
+    raise SystemExit(f"Uploaded PHP was not blocked by NGINX: HTTP {status}")
+if f"EXECUTED-{probe}".encode() in body:
+    raise SystemExit("Uploaded PHP executed unexpectedly")
+
+ftp = connect()
+ftp.delete(php_path)
+ftp.quit()
+PY
+
 # Create a real backup and verify its newest committed directory.
 $compose exec -T backup /usr/local/bin/backup-now
 latest=$($compose exec -T backup sh -ec "ls -1 /backups | grep -E '^[0-9]{8}T[0-9]{6}Z-' | sort | tail -n 1")
