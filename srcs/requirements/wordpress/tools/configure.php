@@ -15,6 +15,7 @@ $settings = [
     'WP_REDIS_DATABASE' => 0,
     'WP_REDIS_PREFIX' => getenv('DOMAIN_NAME') . ':',
     'WP_REDIS_GRACEFUL' => true,
+    'WP_REDIS_DISABLE_METRICS' => true,
 ];
 echo "<?php\n";
 foreach ($settings as $key => $value) {
