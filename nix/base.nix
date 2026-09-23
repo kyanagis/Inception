@@ -115,12 +115,14 @@ let
         mv -f "$root_file_new" "$root_file"
         switched=0
         if systemctl start docker.socket docker.service; then
-          for attempt in $(seq 1 30); do
+          attempt=0
+          while [ "$attempt" -lt 30 ]; do
             observed_root=$(docker info --format '{{.DockerRootDir}}' 2>/dev/null || true)
             if [ "$observed_root" = "$docker_target" ]; then
               switched=1
               break
             fi
+            attempt=$((attempt + 1))
             sleep 1
           done
         fi
