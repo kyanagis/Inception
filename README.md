@@ -6,28 +6,30 @@
 
 Inception builds a small web infrastructure with Docker Compose inside a dedicated virtual machine. The mandatory stack contains three locally built service images: NGINX is the only public entry point on TCP 443, WordPress runs with PHP-FPM, and MariaDB stores the application database. TLS is restricted to versions 1.2 and 1.3.
 
-WordPress files and database files persist in separate Docker named volumes. The dedicated Docker daemon stores its data below /home/<login>/data, so the mandatory persistent data remains under the subject-required learner path without converting the volumes into bind mounts.
+WordPress files and database files persist in separate Docker named volumes. The Docker daemon is configured so the persistent data is stored below `/home/<login>/data`, while the application still uses native named volumes rather than bind mounts.
 
-The bonus profile adds Redis object caching, explicit FTPS access to WordPress uploads, a static site, Adminer, and a scheduled backup service.
+The bonus profile adds Redis object caching, explicit FTPS access to WordPress uploads, a static site, Adminer, and scheduled backups.
 
-Security is treated as a set of hypotheses to verify rather than a set of claims. The repository includes static checks, runtime smoke tests, a bonus integration test, and a hypothesis-driven audit. Containers use read-only root filesystems, reduced Linux capabilities, no-new-privileges, bounded logs, explicit networks, health checks, and file-backed Compose secrets.
+Security is treated as a set of hypotheses to verify rather than a set of claims. The repository includes static checks, runtime smoke tests, a bonus integration test, dependency freshness checks, crash/partial-state fault injection, backup restore drills, and a hypothesis-driven security audit. Containers use read-only root filesystems, reduced Linux capabilities, `no-new-privileges`, bounded logs, explicit networks, health checks, and file-backed Compose secrets.
 
 ### Design choices
 
 | Topic | Chosen model | Why |
 |---|---|---|
 | Virtual machine vs Docker | A dedicated VM hosts Docker; containers isolate individual services | The VM supplies the kernel/host boundary, while containers provide lightweight per-service isolation and reproducible lifecycle management. |
-| Secrets vs environment variables | Credentials/private keys use file-backed Compose secrets; .env contains only non-secret deployment values | Environment variables are easy to leak through process/container metadata, while mounted secret files can be scoped to only the services that require them. |
-| Docker network vs host network | Explicit bridge networks (edge/frontend/backend/adminer_access); host networking is forbidden | Bridge networks make service reachability explicit and keep MariaDB, WordPress, and Redis off the host network namespace. |
-| Docker named volumes vs bind mounts | MariaDB and WordPress persistence use native named volumes; Docker's data-root is under /home/<login>/data | Named volumes satisfy the subject persistence model without coupling containers to arbitrary host paths; moving Docker's data-root keeps the actual data under the required learner path. |
+| Secrets vs environment variables | Credentials and private keys use file-backed Compose secrets; `.env` contains only non-secret deployment values | Environment variables are easy to expose through process/container metadata, while mounted secret files can be scoped to the services that require them. |
+| Docker network vs host network | Explicit bridge networks (`edge`, `frontend`, `backend`, `adminer_access`); host networking is forbidden | Bridge networks make service reachability explicit and keep MariaDB, WordPress, and Redis off the host network namespace. |
+| Docker named volumes vs bind mounts | MariaDB and WordPress persistence use native named volumes; Docker's data-root is below `/home/<login>/data` | Named volumes satisfy the persistence requirement without coupling containers to arbitrary host paths; moving Docker's data-root keeps the actual volume data below the required learner path. |
 
 Virtual machines and containers solve different isolation problems. The VM provides the host boundary and its own kernel; containers share that VM kernel while isolating services through namespaces, cgroups, networks, capabilities, and filesystems.
 
-Passwords and private keys are not stored in the committed .env file. Runtime credentials are generated into the ignored secrets directory and mounted only into the services that need them. The .env file contains non-secret deployment configuration such as the domain and database identifiers.
+Passwords and private keys are not stored in the committed `.env` file. Runtime credentials are generated into the ignored `secrets/` directory and mounted only into the services that need them. The `.env` file contains non-secret deployment configuration such as the domain and database identifiers.
 
 The mandatory network path is:
 
-    client -> NGINX:443 -> WordPress/PHP-FPM:9000 -> MariaDB:3306
+```text
+client -> NGINX:443 -> WordPress/PHP-FPM:9000 -> MariaDB:3306
+```
 
 MariaDB and WordPress have no host-published ports. Redis is also private in the bonus profile. Adminer and the static site bind only to loopback. FTPS is the only bonus service intentionally exposed beyond loopback.
 
@@ -35,84 +37,75 @@ All service images start from a digest-pinned Debian 12 slim base. WordPress, WP
 
 ## Instructions
 
-There are two supported host modes. Do not mix their bootstrap procedures.
+Use a dedicated Debian VM with rootful Docker. Do not run the host bootstrap on a shared workstation or on a Docker daemon that contains unrelated workloads.
 
-### A. Published universal OVA
+### First setup
 
-The OVA already configures Docker and its persistent data-root. Do not run make host-setup inside the OVA.
+```sh
+git clone --branch submit --single-branch https://github.com/kyanagis/Inception.git
+cd Inception
 
-Configure the 42 login, clone current submit, and run make:
+make configure LOGIN=<your_42_login>
+make host-setup LOGIN=<your_42_login>
+make check
+make doctor
+make up
+make test
+```
 
-    inception-setup kyanagis
-    cd /home/inception
-    git clone --branch submit --single-branch \
-      https://github.com/kyanagis/Inception.git Inception
-    cd Inception
-    make
-    make test
-
-A new terminal is not required. make can read the managed identity from
-/var/lib/inception/environment, generates the ignored runtime srcs/.env,
-checks the appliance host ABI, and converges the mandatory stack.
-
-For an evaluator-managed disposable checkout:
-
-    inception-evaluate --full
-
-The OVA intentionally contains no assessed submit source and is not tied to a
-specific submit commit. inception-evaluate resets its disposable checkout to
-current origin/submit, preserves generated runtime state, validates
-.inception/host-abi and .inception/host-tools, and delegates project-specific
-behavior to submit/.inception/evaluate. Missing ordinary userspace tools are
-supplied through an ephemeral Nix shell; host-level requirements can be
-applied in place with inception-host-update instead of re-importing the OVA.
-
-### B. Generic dedicated Debian VM
-
-On a fresh dedicated Debian VM with rootful Docker:
-
-    make configure LOGIN=kyanagis
-    make host-setup LOGIN=kyanagis
-    make check
-    make doctor
-    make up
-    make test
-
-host-setup deliberately refuses the managed OVA, non-VM hosts, non-empty Docker daemons, conflicting host configuration, rootless Docker, and unsafe storage migration.
-
-### Mandatory lifecycle
-
-    make build
-    make up
-    make status
-    make test
-    make audit
-    make stop
-    make start
-    make restart
-    make down
+`host-setup` validates that it is running in a dedicated VM, configures Docker's persistent data-root below `/home/<login>/data`, and applies the local hostname mapping required by the project. It fails closed when it detects an unsafe migration or conflicting Docker state.
 
 Open:
 
-    https://<login>.42.fr
+```text
+https://<login>.42.fr
+```
 
-The TLS certificate is locally generated and self-signed. Verify its fingerprint before accepting the browser exception.
+The TLS certificate is locally generated and self-signed. Verify its SHA-256 fingerprint before accepting the browser exception.
+
+### Mandatory lifecycle
+
+```sh
+make build
+make up
+make status
+make test
+make audit
+make dependency-audit
+make stop
+make start
+make restart
+make down
+```
+
+`make test` converges the mandatory stack and verifies the static repository contract plus the running NGINX/WordPress/MariaDB path.
+
+`make audit` checks declared and runtime security boundaries such as privileged mode, host namespaces, backend port publication, credential handling, read-only root filesystems, `no-new-privileges`, and Docker storage pressure.
+
+`make dependency-audit` verifies that the pinned WordPress release is still reported by upstream as current and that the downloaded archive matches the pinned SHA-256.
 
 ### Bonus lifecycle
 
-    make bonus
-    make bonus-test
-    make backup-now
-    make backup-list
-    make backup-verify BACKUP=<backup-name>
+```sh
+make bonus
+make bonus-test
+make backup-now
+make backup-list
+make backup-verify BACKUP=<backup-name>
+```
 
-bonus-test verifies the actual service set, health status, Redis authentication, loopback exposure of Adminer and the static site, authenticated FTPS write boundaries (including negative traversal/rename/PHP-execution probes), and creation, manifest verification, and a real database/files restore drill for backups.
+`make bonus-test` verifies the complete bonus topology, Redis authentication and object-cache functionality, loopback exposure of Adminer and the static site, authenticated FTPS write boundaries including traversal/rename/PHP-execution negative probes, backup manifest verification, and a real database/files restore drill.
 
-### Destructive reset
+### Recovery and destructive reset
 
-    make fclean
+Before deleting data, record `make status` and the minimum required logs.
 
-This removes project containers, project images, and named-volume data. Verify backups before using it.
+```sh
+make logs
+make fclean
+```
+
+`make fclean` removes the project containers, project images, and named-volume data. Verify a backup before using it when the existing state matters.
 
 ## Resources
 
@@ -131,7 +124,7 @@ Primary references used while implementing and reviewing the project:
 - Mozilla TLS configuration guidance
 - OWASP Docker Security Cheat Sheet
 
-Detailed operating instructions are in USER_DOC.md. Architecture, bootstrap, validation, recovery, and threat-oriented review procedures are in DEV_DOC.md. REQUIREMENTS.md maps subject requirements to implementation and verification evidence.
+Detailed operator instructions are in `USER_DOC.md`. Architecture, bootstrap, validation, recovery, and threat-oriented review procedures are in `DEV_DOC.md`. `REQUIREMENTS.md` maps subject requirements to implementation and verification evidence.
 
 ## AI usage
 
