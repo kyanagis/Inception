@@ -171,7 +171,7 @@ make backup-list
 make backup-verify BACKUP=YYYYMMDDTHHMMSSZ-XXXXXXXXXX
 ```
 
-`make backup-verify` はmanifest、hash、archive構造を確認します。`make bonus-test` はさらに、最新backupのSQLを一時databaseへ実際にrestoreし、`wp_options` とsite URLを検証し、WordPress files archiveを一時directoryへ展開して主要fileを確認します。
+`make backup-verify` はmanifest、hash、archive構造を確認します。`make bonus-test` はさらに、最新backupのSQLを `--network none` の使い捨てMariaDBへ実際にrestoreし、`wp_options` とsite URLを検証します。WordPress files archiveも別の一時directoryへ展開して主要fileを確認します。
 
 backup作成成功とrestore可能性は別の性質なので、運用上重要なbackupは定期的に別環境でもrestoreしてください。
 
