@@ -38,7 +38,7 @@ pkgs.testers.runNixOSTest {
     machine.succeed("test $(uname -m) = x86_64")
     machine.succeed("grep -Fx 13 /etc/inception-host-abi")
     machine.succeed("test -x /lib64/ld-linux-x86-64.so.2")
-    machine.succeed("cp ${pkgs.hello}/bin/hello /tmp/generic-hello && chmod u+w /tmp/generic-hello && ${pkgs.patchelf}/bin/patchelf --set-interpreter /lib64/ld-linux-x86-64.so.2 /tmp/generic-hello && /tmp/generic-hello >/dev/null")
+    machine.succeed("cp ${pkgs.hello}/bin/hello /tmp/generic-hello && chmod u+w /tmp/generic-hello && ${pkgs.patchelf}/bin/patchelf --remove-rpath --set-interpreter /lib64/ld-linux-x86-64.so.2 /tmp/generic-hello && /tmp/generic-hello >/dev/null")
     machine.succeed("test $(cat /etc/inception-kernel-version) = $(uname -r)")
     machine.succeed("inception-evaluate --help")
     machine.succeed("inception-host-update --help")
