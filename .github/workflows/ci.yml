@@ -85,7 +85,9 @@ jobs:
           set -euo pipefail
           log="$RUNNER_TEMP/nix-flake-check.log"
           if ! nix flake check path:. -L --show-trace 2>&1 | tee "$log"; then
-            summary="$(tail -n 40 "$log" | tr '\n' ' ' | cut -c1-350)"
-            echo "::error title=NixOS contract failure::$summary"
+            tail -n 120 "$log" | tr '\n' '\t' | fold -w 900 | while IFS= read -r context; do
+              context="${context//::/%3A%3A}"
+              echo "::error title=NixOS contract failure context::$context"
+            done
             exit 1
           fi
