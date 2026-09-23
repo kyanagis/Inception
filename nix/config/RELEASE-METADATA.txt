@@ -7,13 +7,13 @@ At runtime:
 
     inception-evaluate --prepare
 
-fetches or fast-forwards refs/heads/submit and records the actual checked-out
-commit in its output.
+fetches refs/heads/submit into a disposable evaluation checkout, resets that checkout to the
+remote branch, and records the actual checked-out commit in its output.
 
 Each OVA build records the submit commit used for CI compatibility testing in
 BUILD-PROVENANCE.txt.  That value is evidence of the build-time integration
-test, not a runtime restriction.  Later submit commits are expected to work
-without regenerating the appliance through the .inception/host-tools contract.
+test, not a runtime restriction.  Later submit commits are expected to work without regenerating the appliance through the
+stable .inception/evaluate / host-contract / host-tools boundary.
 
 Submit-only changes are validated by Submit Compatibility CI and do not, by themselves, require rebuilding this appliance.
 
@@ -24,3 +24,11 @@ Host update path: inception-host-update -> current main#inception-runtime
 Primary project path: clone submit -> make
 
 OVA publication is gated on clone-and-make plus submit/.inception/evaluate full compatibility.
+
+GUI contract:
+    Xfce Terminal + Mousepad are installed explicitly.
+    Desktop launchers, Xfce preferred-terminal helper and text/plain MIME association are validated during flake check.
+
+Publication policy:
+    ordinary main/submit pushes do not rebuild the OVA.
+    OVA build is explicit release intent only, followed by an independent released-artifact smoke.
