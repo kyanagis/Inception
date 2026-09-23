@@ -60,8 +60,8 @@ services:
       context: requirements/wordpress
       dockerfile: Dockerfile
       args:
-        WORDPRESS_VERSION: "7.1.1"
-        WORDPRESS_SHA256: 3996fee13448ef12e07e9f0c77db2f655ffa1b7cde71c80a4965d3bf1fb956b3
+        WORDPRESS_VERSION: "7.1.2"
+        WORDPRESS_SHA256: c0c666689d66b870d8825500bb8e402ed04de52602c61a6f516c6236b8c9ac67
         WP_CLI_VERSION: "2.12.0"
         WP_CLI_SHA256: ce34ddd838f7351d6759068d09793f26755463b4a4610a5a5c0a97b68220d85c
         REDIS_PLUGIN_VERSION: "2.6.0"
