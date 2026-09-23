@@ -16,6 +16,38 @@
 let
   loginStateDirectory = "/var/lib/inception";
 
+  # Docker serializes its data-root verbatim in `docker volume inspect`.
+  # It must therefore be the learner path itself, rather than a stable path
+  # which happens to resolve through a symlink.  The service wrapper reads the
+  # root prepared by inception-docker-data-link before every daemon start.
+  dockerDaemon = pkgs.writeShellApplication {
+    name = "inception-dockerd";
+    runtimeInputs = with pkgs; [ coreutils ];
+    text = ''
+      set -euo pipefail
+
+      state_directory=${loginStateDirectory}
+      fallback_root="$state_directory/bootstrap-data/docker"
+      root_file="$state_directory/docker-data-root"
+      docker_root="$fallback_root"
+      if [[ -s "$root_file" ]]; then
+        docker_root="$(<"$root_file")"
+      fi
+
+      case "$docker_root" in
+        "$fallback_root"|/home/[a-z]/data/docker|/home/[a-z][a-z0-9-]*/data/docker)
+          ;;
+        *)
+          echo "Refusing invalid Inception Docker data-root: $docker_root" >&2
+          exit 2
+          ;;
+      esac
+
+      install -d -o root -g root -m 0710 "$docker_root"
+      exec ${pkgs.docker}/bin/dockerd --data-root "$docker_root"
+    '';
+  };
+
   applyLogin = pkgs.writeShellApplication {
     name = "inception-apply-login";
     runtimeInputs = with pkgs; [
@@ -63,21 +95,31 @@ let
 
       docker_target="$data_directory/docker"
       current_link=$(readlink "$bootstrap_home/data" || true)
-      if [ "$current_link" != "$data_directory" ]; then
+      current_root=$(docker info --format '{{.DockerRootDir}}')
+      if [ "$current_link" != "$data_directory" ] || [ "$current_root" != "$docker_target" ]; then
         [ -z "$(docker ps -aq)" ] || { echo "Docker has containers; refusing data-root switch" >&2; exit 3; }
         [ -z "$(docker volume ls -q)" ] || { echo "Docker has volumes; refusing data-root switch" >&2; exit 3; }
         [ -z "$(docker image ls -q)" ] || { echo "Docker has images; refusing data-root switch" >&2; exit 3; }
         install -d -o root -g root -m 0710 "$docker_target"
+        root_file="$state_directory/docker-data-root"
+        previous_root=$(cat "$root_file" 2>/dev/null || printf '%s' "$state_directory/bootstrap-data/docker")
+        root_file_new="$root_file.new"
+        printf '%s\n' "$docker_target" > "$root_file_new"
+        chmod 0600 "$root_file_new"
         systemctl stop docker.service docker.socket
         rm -f "$bootstrap_home/data"
         ln -s "$data_directory" "$bootstrap_home/data"
         chown -h ${userName}:users "$bootstrap_home/data"
+        mv -f "$root_file_new" "$root_file"
         if ! systemctl start docker.socket docker.service ||
-           [ "$(readlink -f "$(docker info --format '{{.DockerRootDir}}')")" != "$(readlink -f "$docker_target")" ]; then
+           [ "$(docker info --format '{{.DockerRootDir}}')" != "$docker_target" ]; then
           systemctl stop docker.service docker.socket || true
           rm -f "$bootstrap_home/data"
           ln -s ${loginStateDirectory}/bootstrap-data "$bootstrap_home/data"
           chown -h ${userName}:users "$bootstrap_home/data"
+          printf '%s\n' "$previous_root" > "$root_file_new"
+          chmod 0600 "$root_file_new"
+          mv -f "$root_file_new" "$root_file"
           systemctl start docker.socket docker.service || true
           echo "Docker data-root switch failed and was rolled back" >&2
           exit 4
@@ -299,7 +341,6 @@ in
   virtualisation.docker = {
     enable = true;
     autoPrune.enable = true;
-    daemon.settings.data-root = "/home/${userName}/data/docker";
   };
 
   users = {
@@ -385,12 +426,29 @@ in
 
   systemd = {
     services.inception-docker-data-link = {
-      description = "Prepare the initial Docker data-root indirection";
+      description = "Prepare the Docker data-root for the configured 42 login";
       requiredBy = [ "docker.service" ];
       before = [ "docker.service" ];
       serviceConfig.Type = "oneshot";
       script = ''
         install -d -o root -g root -m 0710 ${loginStateDirectory}/bootstrap-data/docker
+        root_file=${loginStateDirectory}/docker-data-root
+        fallback_root=${loginStateDirectory}/bootstrap-data/docker
+        docker_root="$fallback_root"
+        if [ -s ${loginStateDirectory}/login ]; then
+          login="$(cat ${loginStateDirectory}/login)"
+          case "$login" in
+            [a-z]|[a-z][a-z0-9-]*[a-z0-9]) docker_root="/home/$login/data/docker" ;;
+            *) echo "Invalid persisted Inception login: $login" >&2; exit 1 ;;
+          esac
+        fi
+        install -d -o root -g root -m 0710 "$docker_root"
+        if [ ! -r "$root_file" ] || [ "$(cat "$root_file")" != "$docker_root" ]; then
+          root_file_new="$root_file.new"
+          printf '%s\n' "$docker_root" > "$root_file_new"
+          chmod 0600 "$root_file_new"
+          mv -f "$root_file_new" "$root_file"
+        fi
         if [ ! -e /home/${userName}/data ] && [ ! -L /home/${userName}/data ]; then
           ln -s ${loginStateDirectory}/bootstrap-data /home/${userName}/data
           chown -h ${userName}:users /home/${userName}/data
@@ -398,6 +456,10 @@ in
         test -L /home/${userName}/data
       '';
     };
+    services.docker.serviceConfig.ExecStart = lib.mkForce [
+      ""
+      "${dockerDaemon}/bin/inception-dockerd"
+    ];
     services.inception-login-state = {
       description = "Restore the configured Inception 42 login";
       wantedBy = [ "multi-user.target" ];

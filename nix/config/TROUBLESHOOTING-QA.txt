@@ -40,13 +40,14 @@ A.
 
 preflightは127.0.0.1固定ではなく、domainがVM自身のIPv4へ解決されることを確認します。
 
-Q. Docker data-rootが/home/inceptionに見えます。
+Q. Docker data-rootを確認したい。
 A.
 
     docker info --format '{{.DockerRootDir}}'
-    readlink -f /home/inception/data/docker
+    docker volume inspect <volume-name>
 
-logical pathが/home/inception/data/dockerでも、realpathは/home/YOUR_LOGIN/data/dockerになる設計です。
+どちらも `/home/YOUR_LOGIN/data/docker` 以下を表示します。評価時には、
+`docker volume inspect` の Mountpoint が `/home/YOUR_LOGIN/data/` 以下であることを確認できます。
 
 Q. mandatoryをまとめて検証したい。
 A.

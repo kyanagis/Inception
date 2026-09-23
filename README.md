@@ -7,11 +7,16 @@ This branch builds the reusable VirtualBox environment used to evaluate and work
 The appliance deliberately does not contain or pin the assessed source tree. The primary workflow is:
 
     inception-setup YOUR_42_LOGIN
+    mkdir ~/inception-evaluation
+    cd ~/inception-evaluation
     git clone --branch submit --single-branch https://github.com/kyanagis/Inception.git Inception
     cd Inception
     make
 
-The clone generates its runtime `srcs/.env` from the OVA identity and verifies the appliance host ABI automatically.
+Clone into a newly-created empty directory as required by the evaluation sheet. The
+repository may live in any empty directory; `/home/YOUR_42_LOGIN` is reserved for
+the mandatory persistent data path, not for the repository. The clone generates its
+runtime `srcs/.env` from the OVA identity and verifies the appliance host ABI automatically.
 
 For a complete mandatory and bonus validation:
 

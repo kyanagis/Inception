@@ -238,11 +238,15 @@ jobs:
             inception-setup smoke42
             test "$(hostname)" = smoke42.42.fr
             test "$(readlink /home/inception/data)" = /home/smoke42/data
-            test "$(readlink -f "$(docker info --format "{{.DockerRootDir}}")")" = /home/smoke42/data/docker
+            test "$(docker info --format "{{.DockerRootDir}}")" = /home/smoke42/data/docker
             rm -rf /home/inception/Inception
             git clone --branch submit --single-branch https://github.com/kyanagis/Inception.git /home/inception/Inception
             cd /home/inception/Inception
             make test
+            for volume in inception_mariadb_data inception_wordpress_data; do
+              mountpoint="$(docker volume inspect "$volume" --format "{{.Mountpoint}}")"
+              case "$mountpoint" in /home/smoke42/data/docker/volumes/*/_data) ;; *) exit 1 ;; esac
+            done
             make audit
             make bonus-test
             make audit
@@ -366,11 +370,15 @@ jobs:
             set -euo pipefail
             test "$(hostname)" = smoke42.42.fr
             test "$(readlink /home/inception/data)" = /home/smoke42/data
-            test "$(readlink -f "$(docker info --format "{{.DockerRootDir}}")")" = /home/smoke42/data/docker
+            test "$(docker info --format "{{.DockerRootDir}}")" = /home/smoke42/data/docker
             systemctl is-active docker.service
             systemctl is-active display-manager.service
             cd /home/inception/Inception
             make test
+            for volume in inception_mariadb_data inception_wordpress_data; do
+              mountpoint="$(docker volume inspect "$volume" --format "{{.Mountpoint}}")"
+              case "$mountpoint" in /home/smoke42/data/docker/volumes/*/_data) ;; *) exit 1 ;; esac
+            done
             make audit
             test -z "$(git status --porcelain --untracked-files=no)"
             printf "reboot-persistence=ok\n"

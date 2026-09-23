@@ -30,9 +30,9 @@ if [[ -r "$state" ]]; then
   [[ ${INCEPTION_DATA_DIR:-} == "/home/${INCEPTION_LOGIN:-}/data" ]] ||
     fail 'H03 login/data state mismatch'
   docker_root=$(docker info --format '{{.DockerRootDir}}')
-  [[ "$(realpath -m "$docker_root")" == "$INCEPTION_DATA_DIR/docker" ]] ||
-    fail "H03 DockerRootDir escapes learner data path: $docker_root"
-  pass 'H03 Docker data-root resolves below /home/<login>/data'
+  [[ "$docker_root" == "$INCEPTION_DATA_DIR/docker" ]] ||
+    fail "H03 DockerRootDir is not the required learner data path: $docker_root"
+  pass 'H03 Docker data-root is exactly /home/<login>/data/docker'
 
   resolved=$(getent ahostsv4 "$DOMAIN_NAME" | awk '{print $1}' | sort -u)
   local_ips=$({ ip -4 -o addr show | awk '{sub(/\/.*/, "", $4); print $4}'; printf '%s\n' 127.0.0.1 127.0.0.2; } | sort -u)
