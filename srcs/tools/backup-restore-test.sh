@@ -50,9 +50,9 @@ $compose exec -T backup sh -ec '
   restore=$(mktemp -d /tmp/inception-restore.XXXXXXXX)
   trap '''rm -rf "$restore"''' EXIT HUP INT TERM
   tar -xzf "/backups/$1/wordpress.tar.gz" -C "$restore"
-  test -f "$restore/html/wp-settings.php"
-  test -f "$restore/html/wp-includes/version.php"
-  test -d "$restore/html/wp-content"
+  test -f "$restore/wp-settings.php"
+  test -f "$restore/wp-includes/version.php"
+  test -d "$restore/wp-content"
 ' sh "$latest" || fail 'WordPress file restore drill failed'
 
 cleanup
