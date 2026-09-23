@@ -42,6 +42,8 @@ pkgs.testers.runNixOSTest {
     machine.succeed("inception-evaluate --help")
     machine.succeed("inception-host-update --help")
     machine.succeed("su - ${userName} -c 'inception-host-update --ensure 6'")
+    machine.fail("su - ${userName} -c 'inception-host-update --ensure 10'")
+    machine.fail("su - ${userName} -c 'inception-host-update --commit main'")
     machine.succeed("command -v ssh-setup")
     machine.succeed("sshd -T | grep -Fxi 'passwordauthentication no'")
     machine.succeed("sshd -T | grep -Fxi 'kbdinteractiveauthentication no'")
