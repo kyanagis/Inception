@@ -4,6 +4,13 @@ Inception x86_64 Universal OVA
 このOVAは特定のsubmit commitを内包・固定しません。
 VirtualBoxへ一度importした後、通常のsubmit変更ではOVAを再生成しません。
 
+GUI
+---
+
+DesktopにはTerminalとText Editorを用意しています。
+TerminalはSuper+Enterでも開けます。Text EditorはMousepadです。
+GUIに問題がある場合はCtrl+Alt+F2でTTYへ切り替えられます。
+
 1. 初回設定
 -----------
 
