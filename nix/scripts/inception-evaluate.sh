@@ -90,10 +90,17 @@ submit_sha=$(git -C "$repo_dir" rev-parse HEAD)
 printf 'submit=%s\nrepo=%s\n' "$submit_sha" "$repo_dir"
 
 host_abi_file="$repo_dir/.inception/host-abi"
+host_source_file="$repo_dir/.inception/host-source"
 if [[ -f "$host_abi_file" ]]; then
   required_abi=$(tr -d '[:space:]' < "$host_abi_file")
   [[ "$required_abi" =~ ^[0-9]+$ ]] || fail 'invalid submit host ABI declaration'
-  inception-host-update --ensure "$required_abi"
+  if [[ -f "$host_source_file" ]]; then
+    host_source=$(tr -d '[:space:]' < "$host_source_file")
+    [[ "$host_source" =~ ^[0-9a-f]{40}$ ]] || fail 'invalid submit host source commit declaration'
+    INCEPTION_HOST_REPO_REF="$host_source" inception-host-update --ensure "$required_abi"
+  else
+    inception-host-update --ensure "$required_abi"
+  fi
 fi
 
 declare -a missing=()
