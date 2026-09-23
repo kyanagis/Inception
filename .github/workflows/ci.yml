@@ -80,4 +80,12 @@ jobs:
       - name: Install Nix
         uses: DeterminateSystems/determinate-nix-action@527f17dd63d2d60d3e5552934bc84b9a33a14d11
       - name: Check NixOS and universal tooling contract
-        run: nix flake check path:. -L --show-trace
+        shell: bash
+        run: |
+          set -euo pipefail
+          log="$RUNNER_TEMP/nix-flake-check.log"
+          if ! nix flake check path:. -L --show-trace 2>&1 | tee "$log"; then
+            summary="$(tail -n 40 "$log" | tr '\n' ' ' | cut -c1-350)"
+            echo "::error title=NixOS contract failure::$summary"
+            exit 1
+          fi
