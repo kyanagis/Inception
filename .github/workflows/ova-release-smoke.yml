@@ -143,171 +143,172 @@ jobs:
           rm -f release-assets/inception.ova release-assets/inception.ova.part-*
           rm -f "$source_disk"
 
-          nix shell nixpkgs#qemu nixpkgs#openssh nixpkgs#socat --command bash -euo pipefail -c '
-            disk="$1"
-            pidfile="$RUNNER_TEMP/inception-qemu.pid"
-            serial="$GITHUB_WORKSPACE/release-assets/QEMU-SERIAL.txt"
-            monitor="$RUNNER_TEMP/inception-qemu.monitor"
-            monitor_log="$GITHUB_WORKSPACE/release-assets/QEMU-MONITOR.txt"
-            screen="$GITHUB_WORKSPACE/release-assets/QEMU-SCREEN.ppm"
+          qemu_system="$(nix shell nixpkgs#qemu --command sh -c 'command -v qemu-system-x86_64')"
+          socat_bin="$(nix shell nixpkgs#socat --command sh -c 'command -v socat')"
+          test -x "$qemu_system"
+          test -x "$socat_bin"
+          pidfile="$RUNNER_TEMP/inception-qemu.pid"
+          serial="$GITHUB_WORKSPACE/release-assets/QEMU-SERIAL.txt"
+          monitor="$RUNNER_TEMP/inception-qemu.monitor"
+          monitor_log="$GITHUB_WORKSPACE/release-assets/QEMU-MONITOR.txt"
+          screen="$GITHUB_WORKSPACE/release-assets/QEMU-SCREEN.ppm"
 
-            dump_state() {
-              {
-                printf "info status\n"
-                printf "info block\n"
-                printf "info pci\n"
-                printf "screendump %s\n" "$screen"
-              } | socat - "UNIX-CONNECT:$monitor" > "$monitor_log" 2>&1 || true
-            }
+          dump_state() {
+            {
+              printf "info status\n"
+              printf "info block\n"
+              printf "info pci\n"
+              printf "screendump %s\n" "$screen"
+            } | "$socat_bin" - "UNIX-CONNECT:$monitor" > "$monitor_log" 2>&1 || true
+          }
 
-            cleanup() {
-              if [ -s "$pidfile" ]; then
-                pid="$(cat "$pidfile")"
-                kill "$pid" >/dev/null 2>&1 || true
-                for _ in $(seq 1 30); do
-                  kill -0 "$pid" >/dev/null 2>&1 || break
-                  sleep 1
-                done
-                kill -9 "$pid" >/dev/null 2>&1 || true
-              fi
-            }
-            trap cleanup EXIT
+          cleanup() {
+            if [ -s "$pidfile" ]; then
+              pid="$(cat "$pidfile")"
+              kill "$pid" >/dev/null 2>&1 || true
+              for _ in $(seq 1 30); do
+                kill -0 "$pid" >/dev/null 2>&1 || break
+                sleep 1
+              done
+              kill -9 "$pid" >/dev/null 2>&1 || true
+            fi
+          }
+          trap cleanup EXIT
 
-            qemu-system-x86_64 \
-              -enable-kvm \
-              -machine pc,accel=kvm \
-              -cpu host \
-              -m 4096 \
-              -smp 4 \
-              -device ich9-ahci,id=sata \
-              -drive "file=$disk,format=qcow2,if=none,id=osdisk,cache=none" \
-              -device ide-hd,drive=osdisk,bus=sata.0 \
-              -netdev user,id=net0,hostfwd=tcp:127.0.0.1:2222-:22 \
-              -device virtio-net-pci,netdev=net0 \
-              -boot order=c,menu=off \
-              -display none \
-              -serial "file:$serial" \
-              -monitor "unix:$monitor,server=on,wait=off" \
-              -daemonize \
-              -pidfile "$pidfile"
+          "$qemu_system" \
+            -enable-kvm \
+            -machine pc,accel=kvm \
+            -cpu host \
+            -m 4096 \
+            -smp 4 \
+            -device ich9-ahci,id=sata \
+            -drive "file=$disk,format=qcow2,if=none,id=osdisk,cache=none" \
+            -device ide-hd,drive=osdisk,bus=sata.0 \
+            -netdev user,id=net0,hostfwd=tcp:127.0.0.1:2222-:22 \
+            -device virtio-net-pci,netdev=net0 \
+            -boot order=c,menu=off \
+            -display none \
+            -serial "file:$serial" \
+            -monitor "unix:$monitor,server=on,wait=off" \
+            -daemonize \
+            -pidfile "$pidfile"
 
-            booted=0
-            for attempt in $(seq 1 90); do
-              if ssh-keyscan -T 1 -p 2222 127.0.0.1 > "$GITHUB_WORKSPACE/release-assets/SSH-HOSTKEYS.txt" 2>/dev/null &&
-                 test -s "$GITHUB_WORKSPACE/release-assets/SSH-HOSTKEYS.txt"; then
-                booted=1
-                break
-              fi
-              kill -0 "$(cat "$pidfile")" >/dev/null 2>&1 || {
-                echo "QEMU exited before sshd became reachable" >&2
-                dump_state
-                cat "$serial" >&2 || true
-                cat "$monitor_log" >&2 || true
-                exit 1
-              }
-              sleep 1
-            done
-            if [ "$booted" -ne 1 ]; then
-              echo "Published OVA did not reach sshd within the boot budget" >&2
+          booted=0
+          for attempt in $(seq 1 90); do
+            if ssh-keyscan -T 1 -p 2222 127.0.0.1 > "$GITHUB_WORKSPACE/release-assets/SSH-HOSTKEYS.txt" 2>/dev/null &&
+               test -s "$GITHUB_WORKSPACE/release-assets/SSH-HOSTKEYS.txt"; then
+              booted=1
+              break
+            fi
+            kill -0 "$(cat "$pidfile")" >/dev/null 2>&1 || {
+              echo "QEMU exited before sshd became reachable" >&2
               dump_state
               cat "$serial" >&2 || true
               cat "$monitor_log" >&2 || true
               exit 1
+            }
+            sleep 1
+          done
+          if [ "$booted" -ne 1 ]; then
+            echo "Published OVA did not reach sshd within the boot budget" >&2
+            dump_state
+            cat "$serial" >&2 || true
+            cat "$monitor_log" >&2 || true
+            exit 1
+          fi
+          printf "Published OVA booted to sshd through KVM.\n" | tee "$GITHUB_WORKSPACE/release-assets/QEMU-BOOT.txt"
+
+          ssh_opts=(
+            -i "$RUNNER_TEMP/ova-smoke-key"
+            -p 2222
+            -o BatchMode=yes
+            -o StrictHostKeyChecking=no
+            -o UserKnownHostsFile=/dev/null
+            -o ServerAliveInterval=15
+            -o ServerAliveCountMax=8
+          )
+
+          ssh "${ssh_opts[@]}" inception@127.0.0.1 '
+            set -euo pipefail
+            printf "guest-abi=%s\n" "$(cat /etc/inception-host-abi)"
+            test "$(uname -m)" = x86_64
+            systemctl is-active docker.service
+            systemctl is-active display-manager.service
+            inception-setup smoke42
+            test "$(hostname)" = smoke42.42.fr
+            test "$(readlink /home/inception/data)" = /home/smoke42/data
+            test "$(readlink -f "$(docker info --format "{{.DockerRootDir}}")")" = /home/smoke42/data/docker
+            rm -rf /home/inception/Inception
+            git clone --branch submit --single-branch https://github.com/kyanagis/Inception.git /home/inception/Inception
+            cd /home/inception/Inception
+            make test
+            make audit
+            make bonus-test
+            make audit
+            test -z "$(git status --porcelain --untracked-files=no)"
+
+            abi="$(cat /etc/inception-host-abi)"
+            if [ "$abi" -ge 6 ]; then
+              command -v xfce4-terminal
+              command -v mousepad
+              test -x "$HOME/Desktop/Terminal.desktop"
+              test -x "$HOME/Desktop/Text-Editor.desktop"
+              grep -Fq "TerminalEmulator=xfce4-terminal" "$HOME/.config/xfce4/helpers.rc"
+              grep -Fq "text/plain=org.xfce.mousepad.desktop" "$HOME/.config/mimeapps.list"
+              session_pid="$(pgrep -u inception -f xfce4-session | head -n 1)"
+              test -n "$session_pid"
+              session_env="$(tr "\\0" "\\n" < "/proc/$session_pid/environ")"
+              display="$(printf "%s\\n" "$session_env" | sed -n "s/^DISPLAY=//p" | head -n 1)"
+              xauthority="$(printf "%s\\n" "$session_env" | sed -n "s/^XAUTHORITY=//p" | head -n 1)"
+              dbus_address="$(printf "%s\\n" "$session_env" | sed -n "s/^DBUS_SESSION_BUS_ADDRESS=//p" | head -n 1)"
+              test -n "$display"
+              test -n "$dbus_address"
+              if [ -z "$xauthority" ]; then
+                xauthority="$HOME/.Xauthority"
+              fi
+              test -r "$xauthority"
+
+              rm -f /tmp/inception-terminal-gui-ok
+              env DISPLAY="$display" XAUTHORITY="$xauthority" DBUS_SESSION_BUS_ADDRESS="$dbus_address" \
+                xfce4-terminal --disable-server --command="sh -c 'printf gui-terminal-ok > /tmp/inception-terminal-gui-ok'" >/tmp/xfce-terminal-smoke.log 2>&1 &
+              for attempt in $(seq 1 30); do
+                [ -s /tmp/inception-terminal-gui-ok ] && break
+                sleep 1
+              done
+              grep -Fx gui-terminal-ok /tmp/inception-terminal-gui-ok
+
+              printf "gui-editor-ok\\n" > /tmp/inception-editor-probe.txt
+              env DISPLAY="$display" XAUTHORITY="$xauthority" DBUS_SESSION_BUS_ADDRESS="$dbus_address" \
+                mousepad --disable-server /tmp/inception-editor-probe.txt >/tmp/mousepad-smoke.log 2>&1 &
+              editor_pid=$!
+              sleep 3
+              kill -0 "$editor_pid"
+              kill "$editor_pid" >/dev/null 2>&1 || true
+              wait "$editor_pid" >/dev/null 2>&1 || true
             fi
-            printf "Published OVA booted to sshd through KVM.\n" | tee "$GITHUB_WORKSPACE/release-assets/QEMU-BOOT.txt"
 
-            ssh_opts=(
-              -i "$RUNNER_TEMP/ova-smoke-key"
-              -p 2222
-              -o BatchMode=yes
-              -o StrictHostKeyChecking=no
-              -o UserKnownHostsFile=/dev/null
-              -o ServerAliveInterval=15
-              -o ServerAliveCountMax=8
-            )
+            printf "first-pass-submit=%s\n" "$(git rev-parse HEAD)"
+          ' | tee "$GITHUB_WORKSPACE/release-assets/OVA-E2E.txt"
 
-            ssh "${ssh_opts[@]}" inception@127.0.0.1 '
-              set -euo pipefail
-              printf "guest-abi=%s\n" "$(cat /etc/inception-host-abi)"
-              test "$(uname -m)" = x86_64
-              systemctl is-active docker.service
-              systemctl is-active display-manager.service
-              inception-setup smoke42
-              test "$(hostname)" = smoke42.42.fr
-              test "$(readlink /home/inception/data)" = /home/smoke42/data
-              test "$(readlink -f "$(docker info --format "{{.DockerRootDir}}")")" = /home/smoke42/data/docker
-              rm -rf /home/inception/Inception
-              git clone --branch submit --single-branch https://github.com/kyanagis/Inception.git /home/inception/Inception
-              cd /home/inception/Inception
-              make test
-              make audit
-              make bonus-test
-              make audit
-              test -z "$(git status --porcelain --untracked-files=no)"
-
-              abi="$(cat /etc/inception-host-abi)"
-              if [ "$abi" -ge 6 ]; then
-                command -v xfce4-terminal
-                command -v mousepad
-                test -x "$HOME/Desktop/Terminal.desktop"
-                test -x "$HOME/Desktop/Text-Editor.desktop"
-                grep -Fq "TerminalEmulator=xfce4-terminal" "$HOME/.config/xfce4/helpers.rc"
-                grep -Fq "text/plain=org.xfce.mousepad.desktop" "$HOME/.config/mimeapps.list"
-                session_pid="$(pgrep -u inception -f xfce4-session | head -n 1)"
-                test -n "$session_pid"
-                session_env="$(tr "\\0" "\\n" < "/proc/$session_pid/environ")"
-                display="$(printf "%s\\n" "$session_env" | sed -n "s/^DISPLAY=//p" | head -n 1)"
-                xauthority="$(printf "%s\\n" "$session_env" | sed -n "s/^XAUTHORITY=//p" | head -n 1)"
-                dbus_address="$(printf "%s\\n" "$session_env" | sed -n "s/^DBUS_SESSION_BUS_ADDRESS=//p" | head -n 1)"
-                test -n "$display"
-                test -n "$dbus_address"
-                if [ -z "$xauthority" ]; then
-                  xauthority="$HOME/.Xauthority"
-                fi
-                test -r "$xauthority"
-
-                rm -f /tmp/inception-terminal-gui-ok
-                env DISPLAY="$display" XAUTHORITY="$xauthority" DBUS_SESSION_BUS_ADDRESS="$dbus_address" \
-                  xfce4-terminal --disable-server --command="sh -c 'printf gui-terminal-ok > /tmp/inception-terminal-gui-ok'" >/tmp/xfce-terminal-smoke.log 2>&1 &
-                for attempt in $(seq 1 30); do
-                  [ -s /tmp/inception-terminal-gui-ok ] && break
-                  sleep 1
-                done
-                grep -Fx gui-terminal-ok /tmp/inception-terminal-gui-ok
-
-                printf "gui-editor-ok\\n" > /tmp/inception-editor-probe.txt
-                env DISPLAY="$display" XAUTHORITY="$xauthority" DBUS_SESSION_BUS_ADDRESS="$dbus_address" \
-                  mousepad --disable-server /tmp/inception-editor-probe.txt >/tmp/mousepad-smoke.log 2>&1 &
-                editor_pid=$!
-                sleep 3
-                kill -0 "$editor_pid"
-                kill "$editor_pid" >/dev/null 2>&1 || true
-                wait "$editor_pid" >/dev/null 2>&1 || true
-              fi
-
-              printf "first-pass-submit=%s\n" "$(git rev-parse HEAD)"
-            ' | tee "$GITHUB_WORKSPACE/release-assets/OVA-E2E.txt"
-
-            # Hard-reset the VM from the hypervisor to exercise persistence and
-            # reboot recovery without granting broad passwordless sudo inside
-            # the published guest.
-            printf "system_reset\n" | socat - "UNIX-CONNECT:$monitor" >/dev/null
-            for attempt in $(seq 1 120); do
-              if ssh "${ssh_opts[@]}" inception@127.0.0.1 true >/dev/null 2>&1; then
-                break
-              fi
-              sleep 1
-            done
-            ssh "${ssh_opts[@]}" inception@127.0.0.1 '
-              set -euo pipefail
-              test "$(hostname)" = smoke42.42.fr
-              test "$(readlink /home/inception/data)" = /home/smoke42/data
-              cd /home/inception/Inception
-              make test
-              make audit
-              printf "reboot-persistence=ok\n"
-            ' | tee -a "$GITHUB_WORKSPACE/release-assets/OVA-E2E.txt"
-          ' bash "$disk"
+          # Hard-reset the VM from the hypervisor to exercise persistence and
+          # reboot recovery without granting broad passwordless sudo inside
+          # the published guest.
+          printf "system_reset\n" | "$socat_bin" - "UNIX-CONNECT:$monitor" >/dev/null
+          for attempt in $(seq 1 120); do
+            if ssh "${ssh_opts[@]}" inception@127.0.0.1 true >/dev/null 2>&1; then
+              break
+            fi
+            sleep 1
+          done
+          ssh "${ssh_opts[@]}" inception@127.0.0.1 '
+            set -euo pipefail
+            test "$(hostname)" = smoke42.42.fr
+            test "$(readlink /home/inception/data)" = /home/smoke42/data
+            cd /home/inception/Inception
+            make test
+            make audit
+            printf "reboot-persistence=ok\n"
+          ' | tee -a "$GITHUB_WORKSPACE/release-assets/OVA-E2E.txt"
 
       - name: Publish import evidence
         if: always()
