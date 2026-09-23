@@ -163,10 +163,18 @@ find "$redis_plugin" -xdev -exec chown root:www-data {} +
 if [ -f "$redis_dropin" ]; then
     chown root:www-data "$redis_dropin"
 fi
+# Do not combine chown and chmod as separate -exec ... {} + actions in one
+# find expression.  GNU find may flush those batches independently; with
+# CAP_FOWNER intentionally dropped, chmod must run only after every selected
+# path has been transferred back to root ownership.
 find "$html" -xdev \( -path "$redis_plugin" -o -path "$redis_dropin" \) -prune -o \
-    -type d -exec chown root:www-data {} + -exec chmod 0755 {} +
+    -type d -exec chown root:www-data {} +
 find "$html" -xdev \( -path "$redis_plugin" -o -path "$redis_dropin" \) -prune -o \
-    -type f -exec chown root:www-data {} + -exec chmod 0644 {} +
+    -type f -exec chown root:www-data {} +
+find "$html" -xdev \( -path "$redis_plugin" -o -path "$redis_dropin" \) -prune -o \
+    -type d -exec chmod 0755 {} +
+find "$html" -xdev \( -path "$redis_plugin" -o -path "$redis_dropin" \) -prune -o \
+    -type f -exec chmod 0644 {} +
 # Apply mode while files are still root-owned, then hand ownership to
 # www-data. The container deliberately lacks CAP_FOWNER, so chmod after chown
 # would fail once the entrypoint no longer owns these paths.
