@@ -197,4 +197,6 @@ latest=$($compose exec -T backup sh -ec "ls -1 /backups | grep -E '^[0-9]{8}T[0-
 [ -n "$latest" ] || fail 'No committed backup directory found'
 $compose exec -T backup /usr/local/bin/backup-manifest verify "/backups/$latest"
 
+sh ./srcs/tools/backup-restore-test.sh
+
 printf 'Bonus stack smoke test passed at https://%s\n' "$DOMAIN_NAME"
