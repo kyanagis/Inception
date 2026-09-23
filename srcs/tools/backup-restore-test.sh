@@ -48,7 +48,7 @@ $compose exec -T mariadb sh -ec '
 $compose exec -T backup sh -ec '
   set -eu
   restore=$(mktemp -d /tmp/inception-restore.XXXXXXXX)
-  trap '''rm -rf "$restore"''' EXIT HUP INT TERM
+  trap "rm -rf \"$restore\"" EXIT HUP INT TERM
   tar -xzf "/backups/$1/wordpress.tar.gz" -C "$restore"
   test -f "$restore/wp-settings.php"
   test -f "$restore/wp-includes/version.php"
