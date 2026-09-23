@@ -253,7 +253,36 @@ jobs:
                 test -x "$HOME/Desktop/Text-Editor.desktop"
                 grep -Fq "TerminalEmulator=xfce4-terminal" "$HOME/.config/xfce4/helpers.rc"
                 grep -Fq "text/plain=org.xfce.mousepad.desktop" "$HOME/.config/mimeapps.list"
-                pgrep -u inception -f xfce4-session >/dev/null
+                session_pid="$(pgrep -u inception -f xfce4-session | head -n 1)"
+                test -n "$session_pid"
+                session_env="$(tr "\\0" "\\n" < "/proc/$session_pid/environ")"
+                display="$(printf "%s\\n" "$session_env" | sed -n "s/^DISPLAY=//p" | head -n 1)"
+                xauthority="$(printf "%s\\n" "$session_env" | sed -n "s/^XAUTHORITY=//p" | head -n 1)"
+                dbus_address="$(printf "%s\\n" "$session_env" | sed -n "s/^DBUS_SESSION_BUS_ADDRESS=//p" | head -n 1)"
+                test -n "$display"
+                test -n "$dbus_address"
+                if [ -z "$xauthority" ]; then
+                  xauthority="$HOME/.Xauthority"
+                fi
+                test -r "$xauthority"
+
+                rm -f /tmp/inception-terminal-gui-ok
+                env DISPLAY="$display" XAUTHORITY="$xauthority" DBUS_SESSION_BUS_ADDRESS="$dbus_address" \
+                  xfce4-terminal --disable-server --command="sh -c 'printf gui-terminal-ok > /tmp/inception-terminal-gui-ok'" >/tmp/xfce-terminal-smoke.log 2>&1 &
+                for attempt in $(seq 1 30); do
+                  [ -s /tmp/inception-terminal-gui-ok ] && break
+                  sleep 1
+                done
+                grep -Fx gui-terminal-ok /tmp/inception-terminal-gui-ok
+
+                printf "gui-editor-ok\\n" > /tmp/inception-editor-probe.txt
+                env DISPLAY="$display" XAUTHORITY="$xauthority" DBUS_SESSION_BUS_ADDRESS="$dbus_address" \
+                  mousepad --disable-server /tmp/inception-editor-probe.txt >/tmp/mousepad-smoke.log 2>&1 &
+                editor_pid=$!
+                sleep 3
+                kill -0 "$editor_pid"
+                kill "$editor_pid" >/dev/null 2>&1 || true
+                wait "$editor_pid" >/dev/null 2>&1 || true
               fi
 
               printf "first-pass-submit=%s\n" "$(git rev-parse HEAD)"
