@@ -338,6 +338,7 @@ jobs:
                 journalctl -u docker.service --no-pager -n 150 2>&1
               '
             } | tee "$GITHUB_WORKSPACE/release-assets/OVA-FAILURE-DIAGNOSTICS.txt"
+            echo '::error title=Initial guest lifecycle failed::The published guest failed before the reboot phase; inspect the ova-release-import-evidence artifact.'
             exit 1
           fi
 
@@ -399,7 +400,7 @@ jobs:
             exit 1
           fi
 
-          ssh "${ssh_opts[@]}" inception@127.0.0.1 '
+          if ! ssh "${ssh_opts[@]}" inception@127.0.0.1 '
             set -euo pipefail
             test "$(hostname)" = smoke42.42.fr
             test "$(readlink /home/inception/data)" = /home/smoke42/data
@@ -411,7 +412,11 @@ jobs:
             make audit
             test -z "$(git status --porcelain --untracked-files=no)"
             printf "reboot-persistence=ok\n"
-          ' | tee -a "$GITHUB_WORKSPACE/release-assets/OVA-E2E.txt"
+          ' | tee -a "$GITHUB_WORKSPACE/release-assets/OVA-E2E.txt"; then
+            echo '::error title=Post-reboot guest lifecycle failed::The guest passed initial lifecycle but failed the persistent-state probe after reboot.'
+            dump_state
+            exit 1
+          fi
 
       - name: Publish import evidence
         if: always()
