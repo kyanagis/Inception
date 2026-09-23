@@ -24,7 +24,7 @@ jobs:
   import:
     if: github.event_name != 'workflow_run' || github.event.workflow_run.conclusion == 'success'
     runs-on: ubuntu-24.04
-    timeout-minutes: 90
+    timeout-minutes: 120
     steps:
       - name: Install Nix
         uses: DeterminateSystems/determinate-nix-action@527f17dd63d2d60d3e5552934bc84b9a33a14d11
@@ -105,6 +105,42 @@ jobs:
           printf '%s\n' "$qemu_img_info" > release-assets/QEMU-DISK.json
           jq -e '.format == "qcow2"' release-assets/QEMU-DISK.json >/dev/null
 
+          # Modify only the disposable QCOW2 copy: inject a CI-only SSH key so
+          # the smoke test can exercise the actual released userspace.  The
+          # published OVA/VMDK remains byte-for-byte untouched.
+          ssh-keygen -q -t ed25519 -N '' -f "$RUNNER_TEMP/ova-smoke-key"
+          sudo modprobe nbd max_part=16
+          sudo qemu-nbd --connect=/dev/nbd0 "$disk"
+          nbd_connected=1
+          cleanup_nbd() {
+            if [ "${nbd_connected:-0}" -eq 1 ]; then
+              sudo qemu-nbd --disconnect /dev/nbd0 >/dev/null 2>&1 || true
+            fi
+          }
+          trap cleanup_nbd EXIT
+          for attempt in $(seq 1 30); do
+            [ -b /dev/nbd0p1 ] && break
+            sleep 1
+          done
+          test -b /dev/nbd0p1
+          mount_dir="$RUNNER_TEMP/ova-root"
+          mkdir -p "$mount_dir"
+          sudo mount /dev/nbd0p1 "$mount_dir"
+          home_owner="$(stat -c '%u:%g' "$mount_dir/home/inception")"
+          sudo install -d -m 0700 "$mount_dir/home/inception/.ssh"
+          sudo cp "$RUNNER_TEMP/ova-smoke-key.pub" "$mount_dir/home/inception/.ssh/authorized_keys"
+          sudo chown -R "$home_owner" "$mount_dir/home/inception/.ssh"
+          sudo chmod 0600 "$mount_dir/home/inception/.ssh/authorized_keys"
+          sync
+          sudo umount "$mount_dir"
+          sudo qemu-nbd --disconnect /dev/nbd0
+          nbd_connected=0
+          trap - EXIT
+
+          # Reclaim runner disk before the guest performs Docker builds.
+          rm -f release-assets/inception.ova release-assets/inception.ova.part-*
+          rm -f "$source_disk"
+
           nix shell nixpkgs#qemu nixpkgs#openssh nixpkgs#socat --command bash -euo pipefail -c '
             disk="$1"
             pidfile="$RUNNER_TEMP/inception-qemu.pid"
@@ -177,6 +213,69 @@ jobs:
               exit 1
             fi
             printf "Published OVA booted to sshd through KVM.\n" | tee "$GITHUB_WORKSPACE/release-assets/QEMU-BOOT.txt"
+
+            ssh_opts=(
+              -i "$RUNNER_TEMP/ova-smoke-key"
+              -p 2222
+              -o BatchMode=yes
+              -o StrictHostKeyChecking=no
+              -o UserKnownHostsFile=/dev/null
+              -o ServerAliveInterval=15
+              -o ServerAliveCountMax=8
+            )
+
+            ssh "${ssh_opts[@]}" inception@127.0.0.1 '
+              set -euo pipefail
+              printf "guest-abi=%s\n" "$(cat /etc/inception-host-abi)"
+              test "$(uname -m)" = x86_64
+              systemctl is-active docker.service
+              systemctl is-active display-manager.service
+              inception-setup smoke42
+              test "$(hostname)" = smoke42.42.fr
+              test "$(readlink /home/inception/data)" = /home/smoke42/data
+              test "$(readlink -f "$(docker info --format "{{.DockerRootDir}}")")" = /home/smoke42/data/docker
+              rm -rf /home/inception/Inception
+              git clone --branch submit --single-branch https://github.com/kyanagis/Inception.git /home/inception/Inception
+              cd /home/inception/Inception
+              make test
+              make audit
+              make bonus-test
+              make audit
+              test -z "$(git status --porcelain --untracked-files=no)"
+
+              abi="$(cat /etc/inception-host-abi)"
+              if [ "$abi" -ge 6 ]; then
+                command -v xfce4-terminal
+                command -v mousepad
+                test -x "$HOME/Desktop/Terminal.desktop"
+                test -x "$HOME/Desktop/Text-Editor.desktop"
+                grep -Fq "TerminalEmulator=xfce4-terminal" "$HOME/.config/xfce4/helpers.rc"
+                grep -Fq "text/plain=org.xfce.mousepad.desktop" "$HOME/.config/mimeapps.list"
+                pgrep -u inception -f xfce4-session >/dev/null
+              fi
+
+              printf "first-pass-submit=%s\n" "$(git rev-parse HEAD)"
+            ' | tee "$GITHUB_WORKSPACE/release-assets/OVA-E2E.txt"
+
+            # Hard-reset the VM from the hypervisor to exercise persistence and
+            # reboot recovery without granting broad passwordless sudo inside
+            # the published guest.
+            printf "system_reset\n" | socat - "UNIX-CONNECT:$monitor" >/dev/null
+            for attempt in $(seq 1 120); do
+              if ssh "${ssh_opts[@]}" inception@127.0.0.1 true >/dev/null 2>&1; then
+                break
+              fi
+              sleep 1
+            done
+            ssh "${ssh_opts[@]}" inception@127.0.0.1 '
+              set -euo pipefail
+              test "$(hostname)" = smoke42.42.fr
+              test "$(readlink /home/inception/data)" = /home/smoke42/data
+              cd /home/inception/Inception
+              make test
+              make audit
+              printf "reboot-persistence=ok\n"
+            ' | tee -a "$GITHUB_WORKSPACE/release-assets/OVA-E2E.txt"
           ' bash "$disk"
 
       - name: Publish import evidence
@@ -189,6 +288,7 @@ jobs:
             release-assets/OVA-CAPABILITIES.txt
             release-assets/VBOX-IMPORT.txt
             release-assets/QEMU-BOOT.txt
+            release-assets/OVA-E2E.txt
             release-assets/QEMU-SERIAL.txt
             release-assets/QEMU-MONITOR.txt
             release-assets/QEMU-DISK.json
