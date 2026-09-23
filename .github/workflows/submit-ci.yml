@@ -196,9 +196,12 @@ jobs:
           make audit
           test -z "$(git status --porcelain --untracked-files=no)"
           site_before="$(docker compose --env-file srcs/.env -f srcs/docker-compose.yml exec -T --user www-data wordpress wp option get siteurl --path=/var/www/html)"
+          salts_before="$(docker compose --env-file srcs/.env -f srcs/docker-compose.yml exec -T wordpress sha256sum /var/www/.inception-state/salts | awk '{print $1}')"
           make restart
           site_after="$(docker compose --env-file srcs/.env -f srcs/docker-compose.yml exec -T --user www-data wordpress wp option get siteurl --path=/var/www/html)"
+          salts_after="$(docker compose --env-file srcs/.env -f srcs/docker-compose.yml exec -T wordpress sha256sum /var/www/.inception-state/salts | awk '{print $1}')"
           test "$site_before" = "$site_after"
+          test "$salts_before" = "$salts_after"
 
       - name: Stable submit evaluation ABI and mode transition matrix
         shell: bash
