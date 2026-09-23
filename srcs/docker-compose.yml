@@ -249,8 +249,8 @@ services:
       context: requirements/bonus/adminer
       dockerfile: Dockerfile
       args:
-        ADMINER_VERSION: "6.0.1"
-        ADMINER_SHA256: c820771612aedd70b26b8f75f442cc9fc118f8225d0166cc6c5909a89f314805
+        ADMINER_VERSION: "6.1.0"
+        ADMINER_SHA256: d21891f420eac5553e9a85d8af2ef3375c1066c4b5c0f573d8e4f936666d2000
     ports:
       - "127.0.0.1:8080:8080"
     networks:
