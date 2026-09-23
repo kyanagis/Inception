@@ -113,8 +113,19 @@ let
         ln -s "$data_directory" "$bootstrap_home/data"
         chown -h ${userName}:users "$bootstrap_home/data"
         mv -f "$root_file_new" "$root_file"
-        if ! systemctl start docker.socket docker.service ||
-           [ "$(docker info --format '{{.DockerRootDir}}')" != "$docker_target" ]; then
+        switched=0
+        if systemctl start docker.socket docker.service; then
+          for attempt in $(seq 1 30); do
+            observed_root=$(docker info --format '{{.DockerRootDir}}' 2>/dev/null || true)
+            if [ "$observed_root" = "$docker_target" ]; then
+              switched=1
+              break
+            fi
+            sleep 1
+          done
+        fi
+        if [ "$switched" -ne 1 ]; then
+          echo "Expected Docker data-root $docker_target but observed ${observed_root:-unavailable}; rolling back" >&2
           systemctl stop docker.service docker.socket || true
           rm -f "$bootstrap_home/data"
           ln -s ${loginStateDirectory}/bootstrap-data "$bootstrap_home/data"
