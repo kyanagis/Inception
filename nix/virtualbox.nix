@@ -109,10 +109,40 @@ let
     <channel name="xfce4-keyboard-shortcuts" version="1.0">
       <property name="commands" type="empty">
         <property name="custom" type="empty">
-          <property name="&lt;Super&gt;Return" type="string" value="kitty"/>
+          <property name="&lt;Super&gt;Return" type="string" value="${pkgs.xfce4-terminal}/bin/xfce4-terminal"/>
         </property>
       </property>
     </channel>
+  '';
+  mimeApps = pkgs.writeText "inception-mimeapps.list" ''
+    [Default Applications]
+    text/plain=org.xfce.mousepad.desktop
+    text/x-csrc=org.xfce.mousepad.desktop
+    text/x-c++src=org.xfce.mousepad.desktop
+    application/x-shellscript=org.xfce.mousepad.desktop
+
+    [Added Associations]
+    text/plain=org.xfce.mousepad.desktop;
+  '';
+  terminalLauncher = pkgs.writeText "inception-terminal.desktop" ''
+    [Desktop Entry]
+    Type=Application
+    Name=Terminal
+    Comment=Open Xfce Terminal
+    Exec=${pkgs.xfce4-terminal}/bin/xfce4-terminal
+    Icon=org.xfce.terminal
+    Terminal=false
+    Categories=System;TerminalEmulator;
+  '';
+  editorLauncher = pkgs.writeText "inception-text-editor.desktop" ''
+    [Desktop Entry]
+    Type=Application
+    Name=Text Editor
+    Comment=Open Mousepad
+    Exec=${pkgs.mousepad}/bin/mousepad
+    Icon=org.xfce.mousepad
+    Terminal=false
+    Categories=Utility;TextEditor;
   '';
   xfceSession = pkgs.writeShellScript "inception-xfce-session" ''
     # LightDM autologin can reach the X session before the per-user D-Bus
@@ -175,8 +205,10 @@ in
       firefox
       kitty
       meld
+      mousepad
       vscodium
       vim
+      xfce4-terminal
     ];
   };
 
@@ -242,6 +274,9 @@ in
       install -d -o ${userName} -g users -m 0755 /home/${userName}/.local/state
       install -d -o ${userName} -g users -m 0755 /home/${userName}/.config/kitty
       install -d -o ${userName} -g users -m 0755 /home/${userName}/Desktop
+      install -o ${userName} -g users -m 0644 ${mimeApps} /home/${userName}/.config/mimeapps.list
+      install -o ${userName} -g users -m 0755 ${terminalLauncher} /home/${userName}/Desktop/Terminal.desktop
+      install -o ${userName} -g users -m 0755 ${editorLauncher} /home/${userName}/Desktop/Text-Editor.desktop
       if [ ! -e /home/${userName}/.config/kitty/kitty.conf ]; then
         install -o ${userName} -g users -m 0644 ${kittyConf} /home/${userName}/.config/kitty/kitty.conf
       fi
