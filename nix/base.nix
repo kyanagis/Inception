@@ -461,6 +461,21 @@ in
             [a-z]|[a-z][a-z0-9-]*[a-z0-9]) docker_root="/home/$login/data/docker" ;;
             *) echo "Invalid persisted Inception login: $login" >&2; exit 1 ;;
           esac
+        elif [ -s "$root_file" ]; then
+          # inception-apply-login stages docker-data-root before Docker is
+          # restarted and commits the login marker only after the transition
+          # succeeds. Preserve that root-owned staged value across the restart
+          # instead of resetting it to bootstrap-data.
+          staged_root="$(cat "$root_file")"
+          case "$staged_root" in
+            "$fallback_root"|/home/[a-z]/data/docker|/home/[a-z][a-z0-9-]*/data/docker)
+              docker_root="$staged_root"
+              ;;
+            *)
+              echo "Invalid staged Inception Docker data-root: $staged_root" >&2
+              exit 1
+              ;;
+          esac
         fi
         install -d -o root -g root -m 0710 "$docker_root"
         if [ ! -r "$root_file" ] || [ "$(cat "$root_file")" != "$docker_root" ]; then
