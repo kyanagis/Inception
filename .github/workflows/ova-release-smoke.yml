@@ -109,12 +109,14 @@ jobs:
           # the smoke test can exercise the actual released userspace.  The
           # published OVA/VMDK remains byte-for-byte untouched.
           ssh-keygen -q -t ed25519 -N '' -f "$RUNNER_TEMP/ova-smoke-key"
+          qemu_nbd="$(nix shell nixpkgs#qemu --command sh -c 'command -v qemu-nbd')"
+          test -x "$qemu_nbd"
           sudo modprobe nbd max_part=16
-          sudo qemu-nbd --connect=/dev/nbd0 "$disk"
+          sudo "$qemu_nbd" --connect=/dev/nbd0 "$disk"
           nbd_connected=1
           cleanup_nbd() {
             if [ "${nbd_connected:-0}" -eq 1 ]; then
-              sudo qemu-nbd --disconnect /dev/nbd0 >/dev/null 2>&1 || true
+              sudo "$qemu_nbd" --disconnect /dev/nbd0 >/dev/null 2>&1 || true
             fi
           }
           trap cleanup_nbd EXIT
@@ -133,7 +135,7 @@ jobs:
           sudo chmod 0600 "$mount_dir/home/inception/.ssh/authorized_keys"
           sync
           sudo umount "$mount_dir"
-          sudo qemu-nbd --disconnect /dev/nbd0
+          sudo "$qemu_nbd" --disconnect /dev/nbd0
           nbd_connected=0
           trap - EXIT
 
