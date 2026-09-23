@@ -61,6 +61,7 @@ jobs:
             printf '%s\n' "- 互換性確認済みsubmit: \`$submit_sha\`"
             printf '%s\n' "- 結合後OVA SHA256: \`$ova_sha\`"
             printf '%s\n' '- x86_64 / 4 vCPU / RAM 4 GiB / Xfce GUI'
+            printf '%s\n' '- VS Code Remote-SSH対応: nix-ldを有効化し、汎用Linux ELFの動的リンク実行をNixOS integration testで検証'
             printf '%s\n\n' '- VirtualBox import、boot、GUI、SSH、clone-and-make、mandatory、bonus、auditを検証'
             printf '%s\n' '必要環境: VirtualBox 7.x、x86_64 CPU、RAM 4 GiB以上、空き容量35 GiB以上。'
             printf '%s\n\n' 'GitHub Releaseの容量制限によりOVAは分割されています。'
