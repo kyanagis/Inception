@@ -20,8 +20,19 @@ echo "<?php\n";
 foreach ($settings as $key => $value) {
     echo 'define(' . var_export($key, true) . ', ' . var_export($value, true) . ");\n";
 }
-foreach (['AUTH_KEY', 'SECURE_AUTH_KEY', 'LOGGED_IN_KEY', 'NONCE_KEY', 'AUTH_SALT', 'SECURE_AUTH_SALT', 'LOGGED_IN_SALT', 'NONCE_SALT'] as $key) {
-    echo 'define(' . var_export($key, true) . ', ' . var_export(bin2hex(random_bytes(32)), true) . ");\n";
+$saltKeys = ['AUTH_KEY', 'SECURE_AUTH_KEY', 'LOGGED_IN_KEY', 'NONCE_KEY', 'AUTH_SALT', 'SECURE_AUTH_SALT', 'LOGGED_IN_SALT', 'NONCE_SALT'];
+$salts = @file('/var/www/.inception-state/salts', FILE_IGNORE_NEW_LINES);
+if ($salts === false || count($salts) !== count($saltKeys)) {
+    fwrite(STDERR, "Invalid persistent WordPress salts\n");
+    exit(1);
+}
+foreach ($saltKeys as $index => $key) {
+    $value = $salts[$index];
+    if (!preg_match('/\\A[0-9a-fA-F]{64}\\z/D', $value)) {
+        fwrite(STDERR, "Invalid persistent WordPress salt value\n");
+        exit(1);
+    }
+    echo 'define(' . var_export($key, true) . ', ' . var_export($value, true) . ");\n";
 }
 echo <<<'CONFIG'
 define('DB_PASSWORD', trim(file_get_contents('/run/php/db_password')));
