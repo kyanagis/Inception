@@ -66,4 +66,18 @@ else
   printf '[SKIP] H06/H07 no Inception containers are running\n'
 fi
 
+docker_root=$(docker --host unix:///var/run/docker.sock info --format '{{.DockerRootDir}}' 2>/dev/null || true)
+if [ -n "$docker_root" ] && [ -d "$docker_root" ]; then
+  usage=$(df -Pk "$docker_root" | awk 'NR==2 {gsub(/%/, "", $5); print $5}')
+  avail_kb=$(df -Pk "$docker_root" | awk 'NR==2 {print $4}')
+  inode_usage=$(df -Pi "$docker_root" | awk 'NR==2 {gsub(/%/, "", $5); print $5}')
+  case "$usage:$avail_kb:$inode_usage" in *[!0-9:]*) fail 'H08 unable to parse Docker storage pressure';; esac
+  [ "$usage" -lt 95 ] || fail "H08 Docker data-root is ${usage}% full"
+  [ "$inode_usage" -lt 95 ] || fail "H08 Docker data-root inode usage is ${inode_usage}%"
+  [ "$avail_kb" -ge 524288 ] || fail "H08 Docker data-root has less than 512 MiB free"
+  pass "H08 Docker storage pressure is below fail-closed thresholds (${usage}% blocks, ${inode_usage}% inodes)"
+else
+  printf '[SKIP] H08 Docker data-root is unavailable\n'
+fi
+
 printf '%s\n' 'Hypothesis-driven security audit completed.'
