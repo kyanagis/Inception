@@ -236,13 +236,6 @@ jobs:
           if [ "$GITHUB_REF" = refs/heads/main ]; then
             release_tag=ova-latest
             release_title="Inception Universal OVA（最新版）"
-            if gh api "repos/$GH_REPO/git/ref/tags/$release_tag" >/dev/null 2>&1; then
-              gh api --method PATCH "repos/$GH_REPO/git/refs/tags/$release_tag" \
-                -f sha="$GITHUB_SHA" -F force=true >/dev/null
-            else
-              gh api --method POST "repos/$GH_REPO/git/refs" \
-                -f ref="refs/tags/$release_tag" -f sha="$GITHUB_SHA" >/dev/null
-            fi
           else
             release_tag="$GITHUB_REF_NAME"
             release_title="$release_tag"
@@ -346,8 +339,13 @@ jobs:
                 -f name="$base" >/dev/null
             done
 
-            gh api --method PATCH "repos/$GH_REPO/git/refs/tags/$release_tag" \
-              -f sha="$GITHUB_SHA" -F force=true >/dev/null
+            if gh api "repos/$GH_REPO/git/ref/tags/$release_tag" >/dev/null 2>&1; then
+              gh api --method PATCH "repos/$GH_REPO/git/refs/tags/$release_tag" \
+                -f sha="$GITHUB_SHA" -F force=true >/dev/null
+            else
+              gh api --method POST "repos/$GH_REPO/git/refs" \
+                -f ref="refs/tags/$release_tag" -f sha="$GITHUB_SHA" >/dev/null
+            fi
             gh release edit "$release_tag" --repo "$GH_REPO" --title "$release_title" --notes-file release-notes.md
 
             for asset in "${assets[@]}"; do
