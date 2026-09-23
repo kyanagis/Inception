@@ -157,6 +157,12 @@ jobs:
             }
           done < .inception/host-tools
 
+      - name: Dependency freshness and archive integrity
+        shell: bash
+        run: |
+          set -euo pipefail
+          sh ./srcs/tools/dependency-audit.sh
+
       - name: Prepare isolated Docker data-root
         shell: bash
         run: |
