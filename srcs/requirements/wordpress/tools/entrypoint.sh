@@ -70,6 +70,26 @@ else
     done
     publish_metadata "$base" .inception-prepare-wp. identity /run/php/expected-identity inception-wordpress-state-v1 "$state"
 fi
+salts_file="$state/salts"
+if [ -e "$salts_file" ] || [ -L "$salts_file" ]; then
+    [ -f "$salts_file" ] && [ ! -L "$salts_file" ] || fail "Unsafe WordPress salts state"
+    [ "$(stat -c '%u:%a' "$salts_file")" = 0:600 ] || fail "Invalid WordPress salts ownership or mode"
+    [ "$(wc -l < "$salts_file")" -eq 8 ] || fail "Invalid WordPress salts count"
+    while IFS= read -r salt; do
+        [ "${#salt}" -eq 64 ] || fail "Invalid WordPress salt length"
+        case "$salt" in *[!0-9a-fA-F]*) fail "Invalid WordPress salt format";; esac
+    done < "$salts_file"
+else
+    salts_tmp=$(mktemp "$state/.salts.XXXXXXXXXX")
+    i=0
+    while [ "$i" -lt 8 ]; do
+        openssl rand -hex 32 >> "$salts_tmp"
+        i=$((i + 1))
+    done
+    chmod 0600 "$salts_tmp"
+    chown root:root "$salts_tmp"
+    mv -T "$salts_tmp" "$salts_file"
+fi
 ready=0
 for attempt in $(seq 1 60); do
     if mariadb --defaults-file=/run/php/app-client.cnf --batch --skip-column-names -e 'SELECT 1' >/dev/null 2>&1; then ready=1; break; fi
