@@ -360,6 +360,11 @@ in
   };
 
   programs = {
+    # VS Code Remote-SSH and other upstream Linux binaries ship with the
+    # conventional ELF interpreter path. nix-ld provides that compatibility
+    # layer without replacing the NixOS-native toolchain.
+    nix-ld.enable = true;
+
     bash.interactiveShellInit = ''
       if [ -r ${loginStateDirectory}/environment ]; then
         set -a
