@@ -270,7 +270,7 @@ jobs:
 
               rm -f /tmp/inception-terminal-gui-ok
               env DISPLAY="$display" XAUTHORITY="$xauthority" DBUS_SESSION_BUS_ADDRESS="$dbus_address" \
-                xfce4-terminal --disable-server --command="sh -c 'printf gui-terminal-ok > /tmp/inception-terminal-gui-ok'" >/tmp/xfce-terminal-smoke.log 2>&1 &
+                xfce4-terminal --disable-server --command="sh -c \"printf gui-terminal-ok > /tmp/inception-terminal-gui-ok\"" >/tmp/xfce-terminal-smoke.log 2>&1 &
               for attempt in $(seq 1 30); do
                 [ -s /tmp/inception-terminal-gui-ok ] && break
                 sleep 1
