@@ -261,7 +261,9 @@ jobs:
               session_pid=
               for attempt in $(seq 1 60); do
                 session_pid="$(pgrep -u inception -f xfce4-session | head -n 1 || true)"
-                [ -n "$session_pid" ] && break
+                if [ -n "$session_pid" ]; then
+                  break
+                fi
                 sleep 1
               done
               if [ -z "$session_pid" ]; then
