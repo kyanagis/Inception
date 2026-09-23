@@ -191,7 +191,7 @@ jobs:
           - clone current submit and run make; runtime env is generated automatically
           - submit source is fetched at runtime and is not baked into the image
           - named-volume Mountpoints are exposed exactly below /home/<42-login>/data/docker
-          - host ABI 12: existing appliances self-update the immutable host capability contract before make
+          - host ABI 13: existing appliances self-update the immutable host capability contract before make
           - bootstrap instructions clone the assessed repository into a new empty directory
           - inception-host-update: self-update the NixOS guest from current main
           - inception-evaluate: update/prepare/mandatory/bonus/full/audit modes
