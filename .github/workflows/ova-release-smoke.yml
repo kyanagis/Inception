@@ -5,6 +5,7 @@ on:
   workflow_run:
     workflows:
       - "Build Universal Inception OVA"
+      - "Submit Compatibility CI"
     types:
       - completed
   push:
@@ -328,12 +329,24 @@ jobs:
           # reboot recovery without granting broad passwordless sudo inside
           # the published guest.
           printf "system_reset\n" | "$socat_bin" - "UNIX-CONNECT:$monitor" >/dev/null
-          for attempt in $(seq 1 120); do
-            if ssh "${ssh_opts[@]}" inception@127.0.0.1 true >/dev/null 2>&1; then
+          went_down=0
+          for attempt in $(seq 1 60); do
+            if ! ssh "${ssh_opts[@]}" inception@127.0.0.1 true >/dev/null 2>&1; then
+              went_down=1
               break
             fi
             sleep 1
           done
+          test "$went_down" -eq 1
+          came_back=0
+          for attempt in $(seq 1 120); do
+            if ssh "${ssh_opts[@]}" inception@127.0.0.1 true >/dev/null 2>&1; then
+              came_back=1
+              break
+            fi
+            sleep 1
+          done
+          test "$came_back" -eq 1
           ssh "${ssh_opts[@]}" inception@127.0.0.1 '
             set -euo pipefail
             test "$(hostname)" = smoke42.42.fr
