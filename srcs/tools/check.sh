@@ -119,8 +119,15 @@ grep -Fq 'user default off' srcs/requirements/bonus/redis/tools/entrypoint.sh ||
   fail 'Redis default ACL user must be disabled'
 grep -Fq 'exec gosu redis "$@"' srcs/requirements/bonus/redis/tools/entrypoint.sh ||
   fail 'Redis must drop privileges before daemon start'
-grep -Fq -- '+flushdb -flushall -config -acl -shutdown' srcs/requirements/bonus/redis/tools/entrypoint.sh ||
-  fail 'Redis lifecycle permission or dangerous-command denylist missing'
+grep -Fq -- '-@all' srcs/requirements/bonus/redis/tools/entrypoint.sh ||
+  fail 'Redis ACL must begin from an explicit deny-all command baseline'
+if grep -Eq '\+@[[:alnum:]_-]+' srcs/requirements/bonus/redis/tools/entrypoint.sh; then
+  fail 'Redis ACL must not grant evolving command categories'
+fi
+for command in '+get' '+set' '+del' '+mget' '+mset' '+expire' '+flushdb' '+eval' '+evalsha' '+script|load'; do
+  grep -Fq -- "$command" srcs/requirements/bonus/redis/tools/entrypoint.sh ||
+    fail "Redis ACL is missing reviewed command $command"
+done
 
 shell_files=$(find srcs/tools srcs/requirements -name '*.sh')
 for file in $shell_files; do
