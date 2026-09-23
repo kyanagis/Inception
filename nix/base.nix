@@ -32,6 +32,12 @@ let
       docker_root="$fallback_root"
       if [[ -s "$root_file" ]]; then
         docker_root="$(<"$root_file")"
+      elif [[ -s "$state_directory/login" ]]; then
+        login="$(<"$state_directory/login")"
+        case "$login" in
+          [a-z]|[a-z][a-z0-9-]*[a-z0-9]) docker_root="/home/$login/data/docker" ;;
+          *) echo "Refusing invalid persisted Inception login: $login" >&2; exit 2 ;;
+        esac
       fi
 
       case "$docker_root" in
