@@ -12,19 +12,20 @@ A.
     inception-audit
 
 Q. repositoryがありません。
-A. OVAはassessment sourceを内包しません。inception-evaluateがcurrent submitをcloneします。
+A. OVAはassessment sourceを内包しません。基本はcurrent submitを自分でcloneしてmakeします。
 
     inception-evaluate --prepare
 
 手動の場合:
 
     cd /home/inception
-    git clone --branch submit --single-branch       https://github.com/kyanagis/Inception.git Inception-submit
+    git clone --branch submit --single-branch \
+      https://github.com/kyanagis/Inception.git Inception
 
 Q. submitが更新されたら新しいOVAが必要ですか。
-A. 通常は不要です。inception-evaluateはorigin/submitへclean checkoutをfast-forwardします。
+A. 通常は不要です。inception-evaluateのcheckoutはdisposableで、current origin/submitへ強制同期します。
 追加userspace commandはsubmit側の.inception/host-toolsからephemeral Nix shellで補えます。
-kernel/architecture/VirtualBox hardware/disk capacity自体が変わる場合だけOVA更新候補です。
+host runtime変更は通常inception-host-updateで追従し、architecture/VirtualBox hardware/disk image bootstrap自体が変わる場合だけOVA再生成候補です。
 
 Q. make host-setupを使いますか。
 A. 公開OVAでは使いません。inception-setupを使用します。
@@ -94,3 +95,12 @@ A.
     inception-host-update
 
 OVAを再importせずcurrent mainのx86_64 runtimeへ更新できます。
+
+Q. TerminalやテキストエディタをGUIから開けません。
+A. final OVAではXfce TerminalとMousepadを明示的に同梱し、Desktop launcherと既定関連付けを設定しています。
+
+    Super+Enter
+    xfce4-terminal
+    mousepad
+
+GUI自体が使えない場合はCtrl+Alt+F2でTTYへ切り替えて診断できます。
