@@ -194,6 +194,8 @@ jobs:
           - nmap, tcpdump, socat, iproute2
           - git, ripgrep, rsync, tmux, htop/btop/ncdu
           - Firefox, VSCodium, Meld, Kitty, Vim
+          - Xfce Terminal + Mousepad with validated desktop launchers/default associations
+          - GUI configuration is installed before the display manager starts
           - dynamic .inception/host-tools -> ephemeral Nix shell fallback
           EOF
       - name: Upload verified OVA artifact
@@ -228,11 +230,12 @@ jobs:
         env:
           GH_TOKEN: ${{ github.token }}
           GH_REPO: ${{ github.repository }}
+          TESTED_SUBMIT_SHA: ${{ needs.submit-compatibility.outputs.submit_sha }}
         run: |
           set -euo pipefail
           if [ "$GITHUB_REF" = refs/heads/main ]; then
             release_tag=ova-latest
-            release_title="Inception Universal OVA (latest)"
+            release_title="Inception Universal OVA（最新版）"
             if gh api "repos/$GH_REPO/git/ref/tags/$release_tag" >/dev/null 2>&1; then
               gh api --method PATCH "repos/$GH_REPO/git/refs/tags/$release_tag" \
                 -f sha="$GITHUB_SHA" -F force=true >/dev/null
@@ -255,20 +258,52 @@ jobs:
             release-assets/inception.ova.part-*
           )
           cat > release-notes.md <<EOF
-          Universal NixOS VirtualBox appliance for the Inception project.
+          42 Inceptionの評価用に作った x86_64 NixOS / VirtualBoxアプライアンスです。
 
-          $(cat release-assets/BUILD-PROVENANCE.txt)
+          このOVAには評価対象のsourceは入れてません。
+          VirtualBoxへimportしたあと、自分の42 loginを設定してcurrent `submit`をcloneし、`make`してください。
 
-          The appliance intentionally does not pin or contain the assessed submit source.
-          Run inception-setup once, then clone submit and run make.
-          The appliance can also self-update its host runtime with inception-host-update.
-          Future ordinary submit changes are consumed at runtime; missing declared userspace
-          tools can be supplied by the safe .inception/host-tools Nix fallback.
+          ```bash
+          inception-setup YOUR_42_LOGIN
 
-          Join and verify:
+          cd /home/inception
+          git clone --branch submit --single-branch \
+            https://github.com/kyanagis/Inception.git Inception
 
-              cat inception.ova.part-* > inception.ova
-              sha256sum --check --ignore-missing SHA256SUMS
+          cd Inception
+          make
+          make test
+          ```
+
+          通常の`submit`変更ではOVAを焼き直す必要はありません。
+          project固有の処理は`submit/.inception/evaluate`側に置き、userspace tool不足はNix、host capability不足は`inception-host-update`で追従できるようにしています。
+
+          このreleaseの検証情報:
+
+          - OVA source: `$GITHUB_SHA`
+          - build時に互換性確認したsubmit: `$TESTED_SUBMIT_SHA`
+          - x86_64 / 4 vCPU / RAM 4 GiB
+          - Xfce GUI
+          - Xfce Terminal / Mousepad
+          - VirtualBox import検証
+          - OVA manifest / SHA-256 / provenance検証
+          - release後smokeで実disk boot、current submitのmandatory/bonus/reboot永続化を検証
+
+          必要環境:
+
+          - VirtualBox 7.x
+          - x86_64 CPU
+          - RAM 4 GiB以上
+          - 空き容量 35 GiB以上
+
+          OVAはGitHub Releaseの容量制限のため分割しています。
+
+          ```bash
+          cat inception.ova.part-* > inception.ova
+          sha256sum --check --ignore-missing SHA256SUMS
+          ```
+
+          `inception.ova: OK` が出たら、生成された`inception.ova`をVirtualBoxへimportしてください。
           EOF
           if [ "$GITHUB_REF" = refs/heads/main ] && gh release view "$release_tag" --repo "$GH_REPO" >/dev/null 2>&1; then
             gh api "repos/$GH_REPO/releases/tags/$release_tag" --jq '.assets[].id' |
