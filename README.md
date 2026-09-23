@@ -14,6 +14,13 @@ Security is treated as a set of hypotheses to verify rather than a set of claims
 
 ### Design choices
 
+| Topic | Chosen model | Why |
+|---|---|---|
+| Virtual machine vs Docker | A dedicated VM hosts Docker; containers isolate individual services | The VM supplies the kernel/host boundary, while containers provide lightweight per-service isolation and reproducible lifecycle management. |
+| Secrets vs environment variables | Credentials/private keys use file-backed Compose secrets; .env contains only non-secret deployment values | Environment variables are easy to leak through process/container metadata, while mounted secret files can be scoped to only the services that require them. |
+| Docker network vs host network | Explicit bridge networks (edge/frontend/backend/adminer_access); host networking is forbidden | Bridge networks make service reachability explicit and keep MariaDB, WordPress, and Redis off the host network namespace. |
+| Docker named volumes vs bind mounts | MariaDB and WordPress persistence use native named volumes; Docker's data-root is under /home/<login>/data | Named volumes satisfy the subject persistence model without coupling containers to arbitrary host paths; moving Docker's data-root keeps the actual data under the required learner path. |
+
 Virtual machines and containers solve different isolation problems. The VM provides the host boundary and its own kernel; containers share that VM kernel while isolating services through namespaces, cgroups, networks, capabilities, and filesystems.
 
 Passwords and private keys are not stored in the committed .env file. Runtime credentials are generated into the ignored secrets directory and mounted only into the services that need them. The .env file contains non-secret deployment configuration such as the domain and database identifiers.
@@ -99,7 +106,7 @@ The TLS certificate is locally generated and self-signed. Verify its fingerprint
     make backup-list
     make backup-verify BACKUP=<backup-name>
 
-bonus-test verifies the actual service set, health status, Redis authentication, loopback exposure of Adminer and the static site, explicit FTPS TLS negotiation, and creation plus verification of a real backup.
+bonus-test verifies the actual service set, health status, Redis authentication, loopback exposure of Adminer and the static site, authenticated FTPS write boundaries (including negative traversal/rename/PHP-execution probes), and creation, manifest verification, and a real database/files restore drill for backups.
 
 ### Destructive reset
 
