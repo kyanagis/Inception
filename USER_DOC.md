@@ -119,7 +119,7 @@ make dependency-audit
 - `make doctor`: VM、Docker、保存先、必要tool、host側前提を検証する。
 - `make test`: mandatory stackを起動し、NGINX → WordPress → MariaDBの実動作と主要な権限境界を確認する。
 - `make audit`: privileged/host namespace、backend port公開、credential環境変数、tracked secret、read-only rootfs、`no-new-privileges`、Docker storage pressure等を仮説単位で確認する。
-- `make dependency-audit`: pinしているWordPress versionがupstreamでcurrentかを確認し、archiveのSHA-256も再検証する。
+- `make dependency-audit`: WordPress Core、WP-CLI、Redis Object Cache、Adminerについてupstreamのcurrent releaseと固定versionを照合し、archiveまたは公式release assetのSHA-256も再検証する。
 
 ## 7. Bonus検証
 
