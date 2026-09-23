@@ -306,12 +306,67 @@ jobs:
           `inception.ova: OK` が出たら、生成された`inception.ova`をVirtualBoxへimportしてください。
           EOF
           if [ "$GITHUB_REF" = refs/heads/main ] && gh release view "$release_tag" --repo "$GH_REPO" >/dev/null 2>&1; then
-            gh api "repos/$GH_REPO/releases/tags/$release_tag" --jq '.assets[].id' |
+            stage_prefix="staged-$GITHUB_RUN_ID-"
+            backup_prefix="backup-$GITHUB_RUN_ID-"
+            mkdir -p release-staging
+
+            declare -a staged_names=()
+            for asset in "${assets[@]}"; do
+              base="$(basename "$asset")"
+              staged_name="$stage_prefix$base"
+              cp "$asset" "release-staging/$staged_name"
+              gh release upload "$release_tag" "release-staging/$staged_name" --repo "$GH_REPO"
+              staged_names+=("$staged_name")
+
+              expected_digest="sha256:$(sha256sum "$asset" | awk '{print $1}')"
+              remote_digest="$(gh api "repos/$GH_REPO/releases/tags/$release_tag" \
+                --jq ".assets[] | select(.name == \"$staged_name\") | .digest")"
+              [ "$remote_digest" = "$expected_digest" ] || {
+                echo "Staged asset digest mismatch for $base" >&2
+                exit 1
+              }
+            done
+
+            # Keep the previous published assets as backups until the new set,
+            # tag and notes have all been verified.
+            for asset in "${assets[@]}"; do
+              base="$(basename "$asset")"
+              old_id="$(gh api "repos/$GH_REPO/releases/tags/$release_tag" \
+                --jq ".assets[] | select(.name == \"$base\") | .id" | head -n 1)"
+              if [ -n "$old_id" ]; then
+                gh api --method PATCH "repos/$GH_REPO/releases/assets/$old_id" \
+                  -f name="$backup_prefix$base" >/dev/null
+              fi
+
+              staged_name="$stage_prefix$base"
+              staged_id="$(gh api "repos/$GH_REPO/releases/tags/$release_tag" \
+                --jq ".assets[] | select(.name == \"$staged_name\") | .id")"
+              [ -n "$staged_id" ]
+              gh api --method PATCH "repos/$GH_REPO/releases/assets/$staged_id" \
+                -f name="$base" >/dev/null
+            done
+
+            gh api --method PATCH "repos/$GH_REPO/git/refs/tags/$release_tag" \
+              -f sha="$GITHUB_SHA" -F force=true >/dev/null
+            gh release edit "$release_tag" --repo "$GH_REPO" --title "$release_title" --notes-file release-notes.md
+
+            for asset in "${assets[@]}"; do
+              base="$(basename "$asset")"
+              expected_digest="sha256:$(sha256sum "$asset" | awk '{print $1}')"
+              remote_digest="$(gh api "repos/$GH_REPO/releases/tags/$release_tag" \
+                --jq ".assets[] | select(.name == \"$base\") | .digest")"
+              [ "$remote_digest" = "$expected_digest" ] || {
+                echo "Published asset digest mismatch for $base" >&2
+                exit 1
+              }
+            done
+            [ "$(gh api "repos/$GH_REPO/git/ref/tags/$release_tag" --jq '.object.sha')" = "$GITHUB_SHA" ]
+
+            gh api "repos/$GH_REPO/releases/tags/$release_tag" \
+              --jq ".assets[] | select(.name | startswith(\"$backup_prefix\")) | .id" |
               while IFS= read -r asset_id; do
                 [ -z "$asset_id" ] || gh api --method DELETE "repos/$GH_REPO/releases/assets/$asset_id"
               done
-            gh release upload "$release_tag" "${assets[@]}" --repo "$GH_REPO"
-            gh release edit "$release_tag" --repo "$GH_REPO" --title "$release_title" --notes-file release-notes.md
           else
             gh release create "$release_tag" "${assets[@]}" \
               --repo "$GH_REPO" --title "$release_title" --notes-file release-notes.md --verify-tag
