@@ -90,10 +90,34 @@ submit_sha=$(git -C "$repo_dir" rev-parse HEAD)
 printf 'submit=%s\nrepo=%s\n' "$submit_sha" "$repo_dir"
 
 host_abi_file="$repo_dir/.inception/host-abi"
+host_contract="$repo_dir/.inception/host-contract.json"
 if [[ -f "$host_abi_file" ]]; then
   required_abi=$(tr -d '[:space:]' < "$host_abi_file")
   [[ "$required_abi" =~ ^[0-9]+$ ]] || fail 'invalid submit host ABI declaration'
-  inception-host-update --ensure "$required_abi"
+
+  host_commit=
+  if [[ -f "$host_contract" ]]; then
+    contract_abi=$(jq -er '.host_abi' "$host_contract") ||
+      fail 'invalid submit host contract'
+    [[ "$contract_abi" == "$required_abi" ]] ||
+      fail 'submit host ABI differs from host contract'
+    host_commit=$(jq -r '.host_source.commit // empty' "$host_contract")
+    host_repository=$(jq -r '.host_source.repository // empty' "$host_contract")
+    if [[ -n "$host_commit" || -n "$host_repository" ]]; then
+      [[ "$host_repository" == https://github.com/kyanagis/Inception.git ]] ||
+        fail 'submit host contract names an untrusted host source repository'
+      [[ "$host_commit" =~ ^[0-9a-f]{40}$ ]] ||
+        fail 'submit host contract does not pin an immutable host source commit'
+    fi
+  fi
+
+  if [[ -n "$host_commit" ]]; then
+    inception-host-update --ensure "$required_abi" "$host_commit"
+  else
+    # Legacy schema is accepted only when no update is necessary. The hardened
+    # updater refuses an unpinned source if the installed ABI is too old.
+    inception-host-update --ensure "$required_abi"
+  fi
 fi
 
 declare -a missing=()
