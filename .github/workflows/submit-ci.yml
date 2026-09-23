@@ -214,6 +214,14 @@ jobs:
           make bonus-test
           test -z "$(git status --porcelain --untracked-files=no)"
 
+      - name: Fault injection recovery
+        shell: bash
+        env:
+          INCEPTION_LOGIN: runner
+        run: |
+          set -euo pipefail
+          sh ./srcs/tools/fault-injection-test.sh
+
       - name: Evidence
         if: always()
         shell: bash
