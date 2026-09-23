@@ -115,6 +115,16 @@ grep -Fq "DISALLOW_FILE_MODS' => true" srcs/requirements/wordpress/tools/configu
   fail 'WordPress file modification protection missing'
 grep -Fq "define('WP_REDIS_PASSWORD', ['wordpress'," srcs/requirements/wordpress/tools/configure.php ||
   fail 'Redis ACL credential array missing from WordPress configuration'
+grep -Fq "'WP_REDIS_DISABLE_METRICS' => true" srcs/requirements/wordpress/tools/configure.php ||
+  fail 'Optional Redis metrics must remain disabled under the least-privilege ACL'
+grep -Fq -- '--no-same-owner' srcs/tools/backup-restore-test.sh ||
+  fail 'Backup restore drill must not require CAP_CHOWN'
+grep -Fq -- '--network none' srcs/tools/backup-restore-test.sh ||
+  fail 'Backup restore drill must use a network-isolated database'
+grep -Fq 'CapabilitiesEngine off' srcs/requirements/bonus/ftp/tools/entrypoint.sh ||
+  fail 'FTPS must not rely on unavailable ambient capabilities'
+grep -Fq 'WtmpLog off' srcs/requirements/bonus/ftp/tools/entrypoint.sh ||
+  fail 'FTPS must not attempt host-style wtmp writes on a read-only rootfs'
 grep -Fq 'user default off' srcs/requirements/bonus/redis/tools/entrypoint.sh ||
   fail 'Redis default ACL user must be disabled'
 grep -Fq 'exec gosu redis "$@"' srcs/requirements/bonus/redis/tools/entrypoint.sh ||
