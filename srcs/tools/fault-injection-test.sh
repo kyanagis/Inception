@@ -93,16 +93,16 @@ trap cleanup_fault_db EXIT HUP INT TERM
 
 docker run --rm \
   --volume "$fault_volume:/var/lib/mysql" \
+  --env "MYSQL_DATABASE=$MYSQL_DATABASE" \
+  --env "MYSQL_USER=$MYSQL_USER" \
+  --env "MYSQL_BACKUP_USER=$MYSQL_BACKUP_USER" \
   --entrypoint /bin/sh \
   mariadb:inception -ec '
     mkdir -p /var/lib/mysql/.inception-bootstrap
     printf "%s\n" inception-bootstrap-v1 > /var/lib/mysql/.inception-bootstrap/.inception-owned
     printf "%s\n%s\n%s\n" "$MYSQL_DATABASE" "$MYSQL_USER" "$MYSQL_BACKUP_USER" \
       > /var/lib/mysql/.inception-bootstrap/.inception-identity
-  ' \
-  --env "MYSQL_DATABASE=$MYSQL_DATABASE" \
-  --env "MYSQL_USER=$MYSQL_USER" \
-  --env "MYSQL_BACKUP_USER=$MYSQL_BACKUP_USER" >/dev/null 2>&1 ||
+  ' >/dev/null 2>&1 ||
   fail 'unable to construct partial MariaDB bootstrap state'
 
 docker run --detach --name "$fault_container" \
