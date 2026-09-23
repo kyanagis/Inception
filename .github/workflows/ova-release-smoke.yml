@@ -252,12 +252,26 @@ jobs:
             if [ "$abi" -ge 6 ]; then
               command -v xfce4-terminal
               command -v mousepad
+              ls -l "$HOME/Desktop/Terminal.desktop" "$HOME/Desktop/Text-Editor.desktop"
               test -x "$HOME/Desktop/Terminal.desktop"
               test -x "$HOME/Desktop/Text-Editor.desktop"
-              grep -Fq "TerminalEmulator=xfce4-terminal" "$HOME/.config/xfce4/helpers.rc"
-              grep -Fq "text/plain=org.xfce.mousepad.desktop" "$HOME/.config/mimeapps.list"
-              session_pid="$(pgrep -u inception -f xfce4-session | head -n 1)"
-              test -n "$session_pid"
+              grep -F "TerminalEmulator=xfce4-terminal" "$HOME/.config/xfce4/helpers.rc"
+              grep -F "text/plain=org.xfce.mousepad.desktop" "$HOME/.config/mimeapps.list"
+
+              session_pid=
+              for attempt in $(seq 1 60); do
+                session_pid="$(pgrep -u inception -f xfce4-session | head -n 1 || true)"
+                [ -n "$session_pid" ] && break
+                sleep 1
+              done
+              if [ -z "$session_pid" ]; then
+                echo "--- GUI session diagnostics ---" >&2
+                ps -fu inception >&2 || true
+                systemctl status display-manager.service --no-pager >&2 || true
+                journalctl -u display-manager.service --no-pager -n 200 >&2 || true
+                ls -la "$HOME" "$HOME/Desktop" "$HOME/.config" "$HOME/.config/xfce4" >&2 || true
+                exit 31
+              fi
               session_env="$(tr "\\0" "\\n" < "/proc/$session_pid/environ")"
               display="$(printf "%s\\n" "$session_env" | sed -n "s/^DISPLAY=//p" | head -n 1)"
               xauthority="$(printf "%s\\n" "$session_env" | sed -n "s/^XAUTHORITY=//p" | head -n 1)"
