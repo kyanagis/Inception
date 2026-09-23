@@ -9,6 +9,9 @@ on:
       - "v*"
     paths:
       - ".github/workflows/ova.yml"
+      - "flake.nix"
+      - "flake.lock"
+      - "nix/**"
 
 concurrency:
   group: ova-${{ github.workflow }}-${{ github.ref }}
