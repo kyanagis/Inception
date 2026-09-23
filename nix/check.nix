@@ -37,6 +37,7 @@ pkgs.testers.runNixOSTest {
     machine.succeed("for cmd in jq python3 ip shellcheck git make curl openssl nmap tcpdump inception-evaluate inception-audit inception-host-update; do command -v \"$cmd\"; done")
     machine.succeed("test $(uname -m) = x86_64")
     machine.succeed("grep -Fx 9 /etc/inception-host-abi")
+    machine.succeed("test -x /lib64/ld-linux-x86-64.so.2")
     machine.succeed("test $(cat /etc/inception-kernel-version) = $(uname -r)")
     machine.succeed("inception-evaluate --help")
     machine.succeed("inception-host-update --help")
