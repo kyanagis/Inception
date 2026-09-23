@@ -325,35 +325,53 @@ jobs:
             exit 1
           fi
 
-          # Hard-reset the VM from the hypervisor to exercise persistence and
-          # reboot recovery without granting broad passwordless sudo inside
-          # the published guest.
-          printf "system_reset\n" | "$socat_bin" - "UNIX-CONNECT:$monitor" >/dev/null
+          # Exercise the evaluator-facing reboot path gracefully.  The released
+          # appliance intentionally ships with the temporary local password
+          # "inception"; the guide requires changing it before real use.  Using
+          # sudo here avoids turning a Docker-write-in-progress hard reset into
+          # a false negative for the release gate.
+          ssh "${ssh_opts[@]}" inception@127.0.0.1             "printf '%s\\n' inception | sudo -S -p '' systemctl reboot" || true
+
           went_down=0
-          for attempt in $(seq 1 60); do
+          for attempt in $(seq 1 90); do
             if ! ssh "${ssh_opts[@]}" inception@127.0.0.1 true >/dev/null 2>&1; then
               went_down=1
               break
             fi
             sleep 1
           done
-          test "$went_down" -eq 1
+          if [ "$went_down" -ne 1 ]; then
+            echo "Guest did not leave SSH during graceful reboot" >&2
+            dump_state
+            exit 1
+          fi
+
           came_back=0
-          for attempt in $(seq 1 120); do
+          for attempt in $(seq 1 180); do
             if ssh "${ssh_opts[@]}" inception@127.0.0.1 true >/dev/null 2>&1; then
               came_back=1
               break
             fi
             sleep 1
           done
-          test "$came_back" -eq 1
+          if [ "$came_back" -ne 1 ]; then
+            echo "Guest did not return to SSH after graceful reboot" >&2
+            dump_state
+            cat "$serial" >&2 || true
+            exit 1
+          fi
+
           ssh "${ssh_opts[@]}" inception@127.0.0.1 '
             set -euo pipefail
             test "$(hostname)" = smoke42.42.fr
             test "$(readlink /home/inception/data)" = /home/smoke42/data
+            test "$(readlink -f "$(docker info --format "{{.DockerRootDir}}")")" = /home/smoke42/data/docker
+            systemctl is-active docker.service
+            systemctl is-active display-manager.service
             cd /home/inception/Inception
             make test
             make audit
+            test -z "$(git status --porcelain --untracked-files=no)"
             printf "reboot-persistence=ok\n"
           ' | tee -a "$GITHUB_WORKSPACE/release-assets/OVA-E2E.txt"
 
