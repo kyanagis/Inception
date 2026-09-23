@@ -14,7 +14,7 @@ concurrency:
   cancel-in-progress: true
 
 permissions:
-  contents: write
+  contents: read
 
 jobs:
   check:
@@ -81,72 +81,3 @@ jobs:
         uses: DeterminateSystems/determinate-nix-action@527f17dd63d2d60d3e5552934bc84b9a33a14d11
       - name: Check NixOS and universal tooling contract
         run: nix flake check path:. -L --show-trace
-
-
-  release-cleanup:
-    if: github.event_name == 'push' && github.ref == 'refs/heads/main'
-    runs-on: ubuntu-24.04
-    timeout-minutes: 15
-    env:
-      GH_TOKEN: ${{ github.token }}
-      GH_REPO: ${{ github.repository }}
-    steps:
-      - name: Remove obsolete OVA release and rewrite latest release
-        shell: bash
-        run: |
-          set -euo pipefail
-
-          if gh release view v2026.09.22-ova.2 >/dev/null 2>&1; then
-            gh release delete v2026.09.22-ova.2 --cleanup-tag --yes
-          fi
-
-          cat > /tmp/ova-release-notes.md <<'EOF'
-          42 Inceptionの評価用に作った x86_64 NixOS / VirtualBoxアプライアンスです。
-
-          このOVAには評価対象のsourceは入れてません。
-          初回起動後に自分の42 loginを設定して、`submit`ブランチをcloneして`make`してください。
-
-          ```bash
-          inception-setup YOUR_42_LOGIN
-
-          cd /home/inception
-          git clone --branch submit --single-branch \
-            https://github.com/kyanagis/Inception.git Inception
-
-          cd Inception
-          make
-          ```
-
-          通常の`submit`変更ではOVAを再生成する必要はありません。
-          userspace側で追加のtoolが必要になった場合はNixで補完し、host側の変更が必要になった場合は`inception-host-update`で追従できるようにしてあります。
-
-          現在の確認状況:
-
-          - OVA source: `a89c46834a6f1763404637bd344250a86eabdc30`
-          - current submit compatibility: `4ea0f08f4d9329c48cc635b78361875cb4d0747a`
-          - x86_64
-          - VirtualBox import確認済み
-          - 公開OVAのdiskを実bootしてsshd到達まで確認済み
-          - SHA-256 / provenance確認済み
-          - RAM 4 GiB / CPU 4 vCPU
-
-          必要環境:
-
-          - VirtualBox 7.x
-          - x86_64 CPU
-          - RAM 4 GiB
-          - 空き容量 35 GiB以上
-
-          OVAはGitHub Releaseの容量制限のため分割しています。
-
-          ```bash
-          cat inception.ova.part-* > inception.ova
-          sha256sum --check --ignore-missing SHA256SUMS
-          ```
-
-          `inception.ova: OK` が出たら、その`inception.ova`をVirtualBoxへimportしてください。
-          EOF
-
-          gh release edit ova-latest \
-            --title 'Inception Universal OVA（最新版）' \
-            --notes-file /tmp/ova-release-notes.md
