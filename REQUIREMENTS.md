@@ -38,7 +38,7 @@
 | FTPS write boundary | uploadsのみwrite許可、core/plugin/theme/traversal/rename拒否、uploads PHP実行拒否 | make bonus-test |
 | dependency freshness | WordPress公式version-check + upstream archive SHA-256照合 | make dependency-audit、CI |
 | WordPress auth salts永続化 | .inception-state/saltsをatomic生成・再利用 | restart test、make test |
-| backup restore可能性 | 一時DBへSQL restore、別tmpdirへWordPress archive展開 | make bonus-test |
+| backup restore可能性 | network=noneの使い捨てMariaDBへSQL restore、別tmpdirへWordPress archive展開 | make bonus-test |
 | crash/partial-state recovery | PID1 kill + WordPress partial publish residueからの再収束 | Submit Compatibility CI |
 | storage pressure検知 | Docker data-root block/inode/free-space閾値 | make audit |
 | privileged host update provenance | ABI9以降は.inception/host-sourceの40hex commitへ固定 | host ABI CI、inception-host-update |
