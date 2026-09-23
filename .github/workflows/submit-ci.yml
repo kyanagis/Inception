@@ -217,6 +217,38 @@ jobs:
           make bonus-test
           test -z "$(git status --porcelain --untracked-files=no)"
 
+      - name: Install Trivy vulnerability scanner
+        uses: aquasecurity/setup-trivy@3fb12ec12f41e471780db15c232d5dd185dcb514 # v0.2.6
+        with:
+          version: v0.74.0
+          cache: true
+
+      - name: Gate fixable critical vulnerabilities in built images
+        shell: bash
+        run: |
+          set -euo pipefail
+          images=(
+            mariadb:inception
+            wordpress:inception
+            nginx:inception
+            redis:inception
+            ftp:inception
+            static-site:inception
+            adminer:inception
+            backup:inception
+          )
+          for image in "${images[@]}"; do
+            echo "=== Trivy: $image ==="
+            trivy image \
+              --scanners vuln \
+              --pkg-types os,library \
+              --ignore-unfixed \
+              --severity CRITICAL \
+              --exit-code 1 \
+              --timeout 10m \
+              "$image"
+          done
+
       - name: Fault injection recovery
         shell: bash
         env:
