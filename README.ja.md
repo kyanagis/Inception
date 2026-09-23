@@ -2,23 +2,36 @@
 
 [English](README.md)
 
-Inceptionの評価・開発に使う再利用可能なVirtualBox環境です。
+Inceptionの評価・開発に使う x86_64 VirtualBox環境です。
 
-このOVAは評価対象のsourceを内包せず、特定の`submit` commitにも固定しません。初回設定後、実行時にcurrent `submit` branchを取得します。
+このOVAは評価対象のsourceを内包せず、特定の`submit` commitにも固定しません。基本手順はこれです。
 
     inception-setup YOUR_42_LOGIN
-    inception-evaluate --prepare
 
-mandatoryとbonusをまとめて完全検証する場合:
+    cd /home/inception
+    git clone --branch submit --single-branch \
+      https://github.com/kyanagis/Inception.git Inception
+    cd Inception
+    make
+
+`make`はOVAに保存された42 loginを読み、runtime用`srcs/.env`を生成してmandatory stackを起動します。
+
+完全検証:
+
+    make test
+    make audit
+    make bonus-test
+
+またはOVA管理のdisposable checkoutで:
 
     inception-evaluate --full
 
-OVAにはDocker/Compose、Nix、jq、Python、C/C++ build tools、GDB、strace、shellcheck、nmap、tcpdump、socat、Git、ripgrep、rsync、tmux、Firefox、VSCodium、Meld、Kitty、Vim、仮説駆動診断用の`inception-audit`を同梱します。
+OVAにはDocker/Compose、Nix、jq、Python、C/C++ build tools、GDB、strace、shellcheck、nmap、tcpdump、socat、Git、ripgrep、rsync、tmux、Firefox、VSCodium、Meld、Kitty、Vim、Xfce Terminal、Mousepad、仮説駆動診断用の`inception-audit`を同梱します。
 
-通常の`submit`変更ではOVAを再生成しません。evaluatorはcleanなlocal checkoutを`origin/submit`へfast-forwardします。将来通常のuserspace commandが追加で必要になった場合は、submit側の`.inception/host-tools`でcommandと安全なnixpkgs attributeを宣言でき、不足packageだけephemeral Nix shellで補完します。
+通常の`submit`変更ではOVAを再生成しません。project固有の評価手順は`submit/.inception/evaluate`が所有し、不足userspace commandは`.inception/host-tools`からephemeral Nix shellで補完できます。
 
-guest kernel機能、CPU architecture、VirtualBox hardware定義、base disk容量など、OVAそのもののhost-level要件が変わる場合は再生成対象です。
+host runtime側の更新が必要な場合も、通常は`inception-host-update`でcurrent `main#inception-runtime`へin-place更新します。kernelが変わった場合だけ更新後に1回rebootが必要です。
 
-OVA CIは生成前にcurrent `submit`のmandatory/bonusを実際に起動・検証し、その後manifest、VirtualBox import、split artifact checksumまで確認します。
+OVAそのものを焼き直すのは、CPU architecture、VirtualBox仮想hardware、base disk layout/capacity、初回bootに必要なbootstrap内容など、既存guestのin-place更新では表現できない変更を入れる場合です。
 
-`main`の成功buildは検証済みartifactを`ova-latest` Releaseへ反映し、version tagはimmutableなversioned releaseを作成します。
+OVA Source CIはNixOS/runtime/GUI契約を常時検証します。OVA生成は通常のmain pushでは行わず、明示的なrelease実行またはversion tagでのみ行います。生成時はcurrent `submit`のmandatory/bonus/security検証、OVA manifest、VirtualBox import、split checksumを通過したartifactだけをrelease対象にします。公開後はReleased OVA Smokeで実diskのbootとruntime評価を再検証します。
