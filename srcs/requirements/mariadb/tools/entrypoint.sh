@@ -25,6 +25,11 @@ staging=$base/.inception-bootstrap
 data=$base/data
 [ ! -L "$base" ] && [ ! -L "$data" ] && [ ! -L "$staging" ] || fail "Symlink database path rejected"
 mkdir -p /run/mysqld "$base"
+mysql_uid=$(id -u mysql)
+mysql_gid=$(id -g mysql)
+case "$mysql_uid:$mysql_gid" in
+    *[!0-9:]*) fail "Invalid mysql account identity" ;;
+esac
 for directory in /run/mysqld "$base"; do
     owner=$(stat -c '%u:%g' "$directory")
     case "$owner" in
@@ -32,7 +37,7 @@ for directory in /run/mysqld "$base"; do
             chmod 0750 "$directory"
             chown mysql:mysql "$directory"
             ;;
-        100:101)
+        "$mysql_uid:$mysql_gid")
             [ "$(stat -c %a "$directory")" = 750 ] || fail "Invalid database directory permissions"
             ;;
         *) fail "Invalid database directory ownership";;
