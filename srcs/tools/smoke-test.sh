@@ -38,6 +38,10 @@ curl --fail --silent --show-error --cacert secrets/tls_certificate.pem \
   --resolve invalid.example:443:127.0.0.1 https://invalid.example/)" = 421 ]
 [ "$(curl --silent --cacert secrets/tls_certificate.pem --output /dev/null --write-out '%{http_code}' \
   --resolve "$DOMAIN_NAME:443:127.0.0.1" "https://$DOMAIN_NAME/xmlrpc.php")" = 403 ]
+[ "$(curl --silent --cacert secrets/tls_certificate.pem --output /dev/null --write-out '%{http_code}' \
+  --resolve "$DOMAIN_NAME:443:127.0.0.1" "https://$DOMAIN_NAME/wp-config.php")" = 403 ]
+[ "$(curl --silent --cacert secrets/tls_certificate.pem --output /dev/null --write-out '%{http_code}' \
+  --resolve "$DOMAIN_NAME:443:127.0.0.1" "https://$DOMAIN_NAME/.git/config")" = 403 ]
 
 ./srcs/tools/verify-tls.sh
 
