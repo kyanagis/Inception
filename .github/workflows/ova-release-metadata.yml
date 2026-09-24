@@ -1,24 +1,16 @@
-name: Refresh OVA Release Metadata
+name: Frozen OVA Release Metadata
 
 on:
+  # The release description is frozen with the accepted OVA.  This workflow
+  # remains only as an auditable record and cannot update GitHub Release data.
   workflow_dispatch:
-  workflow_run:
-    workflows:
-      - "Build Universal Inception OVA"
-    types:
-      - completed
-  push:
-    branches:
-      - main
-    paths:
-      - ".github/workflows/ova-release-metadata.yml"
 
 permissions:
-  contents: write
+  contents: read
 
 jobs:
   refresh:
-    if: github.event_name != 'workflow_run' || github.event.workflow_run.conclusion == 'success'
+    if: ${{ false }}
     runs-on: ubuntu-24.04
     timeout-minutes: 10
     steps:

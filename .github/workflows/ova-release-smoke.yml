@@ -4,7 +4,6 @@ on:
   workflow_dispatch:
   workflow_run:
     workflows:
-      - "Build Universal Inception OVA"
       - "Submit Compatibility CI"
     types:
       - completed
