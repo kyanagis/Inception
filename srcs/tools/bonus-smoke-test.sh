@@ -226,6 +226,19 @@ ftp.delete(php_path)
 ftp.quit()
 PY
 
+# Prove the dedicated backup account cannot mutate WordPress data.
+$compose exec -T backup sh -ec '
+  set -eu
+  password=$(tr -d "\r\n" < /run/secrets/db_backup_password)
+  MYSQL_PWD="$password" mariadb --protocol=tcp --host=mariadb --user="$MYSQL_BACKUP_USER" \
+    --batch --skip-column-names "$MYSQL_DATABASE" -e "SELECT 1" | grep -Fx 1 >/dev/null
+  if MYSQL_PWD="$password" mariadb --protocol=tcp --host=mariadb --user="$MYSQL_BACKUP_USER" \
+      "$MYSQL_DATABASE" -e "UPDATE wp_options SET option_value = option_value WHERE 1 = 0" >/dev/null 2>&1; then
+    echo "Backup DB user unexpectedly has UPDATE privilege" >&2
+    exit 1
+  fi
+'
+
 # Create a real backup and verify its newest committed directory.
 $compose exec -T backup /usr/local/bin/backup-now
 latest=$($compose exec -T backup sh -ec "ls -1 /backups | grep -E '^[0-9]{8}T[0-9]{6}Z-' | sort | tail -n 1")
