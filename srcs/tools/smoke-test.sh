@@ -76,4 +76,26 @@ fi
 [ "$($compose exec -T --user www-data wordpress wp option get siteurl --path=/var/www/html)" = "https://$DOMAIN_NAME" ]
 $compose exec -T mariadb mariadb-healthcheck
 
+# Treat a compromised WordPress container as the attacker: the application DB
+# credential must work only inside its dedicated schema and must not acquire
+# server-global administration rights.
+$compose exec -T wordpress sh -ec '
+  set -eu
+  password=$(tr -d "\r\n" < /run/secrets/db_password)
+  MYSQL_PWD="$password" mariadb --protocol=tcp --host=mariadb --user="$MYSQL_USER" \
+    --batch --skip-column-names "$MYSQL_DATABASE" -e "SELECT 1" | grep -Fx 1 >/dev/null
+  if MYSQL_PWD="$password" mariadb --protocol=tcp --host=mariadb --user="$MYSQL_USER" \
+      --batch --skip-column-names mysql -e "SELECT COUNT(*) FROM global_priv" >/dev/null 2>&1; then
+    echo "WordPress DB user unexpectedly read the mysql privilege schema" >&2
+    exit 1
+  fi
+  if MYSQL_PWD="$password" mariadb --protocol=tcp --host=mariadb --user="$MYSQL_USER" \
+      -e "CREATE DATABASE inception_privilege_probe" >/dev/null 2>&1; then
+    MYSQL_PWD="$password" mariadb --protocol=tcp --host=mariadb --user="$MYSQL_USER" \
+      -e "DROP DATABASE inception_privilege_probe" >/dev/null 2>&1 || true
+    echo "WordPress DB user unexpectedly created a second database" >&2
+    exit 1
+  fi
+'
+
 echo "Mandatory stack smoke test passed at https://$DOMAIN_NAME"
