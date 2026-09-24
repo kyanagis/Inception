@@ -10,7 +10,7 @@ on:
   workflow_dispatch:
 
 concurrency:
-  group: submit-ci-${{ github.workflow }}-${{ github.ref }}-${{ github.sha }}
+  group: submit-ci-${{ github.workflow }}-${{ github.ref }}
   cancel-in-progress: true
 
 permissions:
