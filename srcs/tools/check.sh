@@ -63,9 +63,14 @@ printf '%s' "$config" | jq -e '
   ([.services.ftp.secrets[].source] | sort == ["ftp_password", "ftps_certificate", "ftps_private_key"]) and
   ((.services.adminer.secrets // []) | length == 0) and
   ((.services["static-site"].secrets // []) | length == 0) and
+  (.services.mariadb.networks | keys == ["backend"]) and
+  (.services.wordpress.networks | keys | sort == ["backend", "frontend"]) and
+  (.services.nginx.networks | keys | sort == ["edge", "frontend"]) and
+  (.services.redis.networks | keys == ["backend"]) and
   (.services.ftp.networks | keys == ["edge"]) and
   (.services["static-site"].networks | keys == ["edge"]) and
   (.services.adminer.networks | keys | sort == ["adminer_access", "backend"]) and
+  (.services.backup.networks | keys == ["backend"]) and
   all(.services | to_entries[];
     all(.value.tmpfs[]?; contains("size=") and contains("nosuid") and contains("nodev") and contains("noexec")))
 ' >/dev/null || fail 'Least-privilege service boundaries are incomplete'
