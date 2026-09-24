@@ -257,6 +257,36 @@ jobs:
               "$image"
           done
 
+      - name: Generate image SBOM evidence
+        shell: bash
+        run: |
+          set -euo pipefail
+          mkdir -p sbom
+          images=(
+            mariadb:inception
+            wordpress:inception
+            nginx:inception
+            redis:inception
+            ftp:inception
+            static-site:inception
+            adminer:inception
+            backup:inception
+          )
+          for image in "${images[@]}"; do
+            name="${image%%:*}"
+            trivy image --format cyclonedx --output "sbom/$name.cdx.json" "$image"
+            jq -e '.bomFormat == "CycloneDX" and (.components | length > 0)' "sbom/$name.cdx.json" >/dev/null
+          done
+          sha256sum sbom/*.cdx.json > sbom/SHA256SUMS
+
+      - name: Publish image SBOM evidence
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a
+        with:
+          name: submit-image-sbom
+          path: sbom
+          if-no-files-found: error
+          retention-days: 30
+
       - name: Fault injection recovery
         shell: bash
         env:
