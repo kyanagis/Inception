@@ -44,7 +44,10 @@ printf '%s' "$config" | jq -e '
     .value.image == (.key + ":inception") and
     .value.restart == "unless-stopped" and .value.stop_grace_period == "30s" and
     .value.init == true and .value.read_only == true and
-    (.value.mem_limit > 0) and (.value.pids_limit > 0) and
+    (.value.mem_limit > 0) and (.value.cpus > 0) and (.value.pids_limit > 0) and
+    .value.logging.driver == "json-file" and
+    .value.logging.options["max-size"] == "10m" and
+    .value.logging.options["max-file"] == "3" and
     .value.build.dockerfile == "Dockerfile" and
     (.value.networks | length > 0) and
     (.value.network_mode == null) and (.value.links == null)) and
