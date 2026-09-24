@@ -85,11 +85,22 @@ printf '%s' "$config" | jq -e '
     . == "SETGID" or
     . == "SETUID" or
     . == "SYS_CHROOT";
+  all(.services[]; ((.cap_drop // []) | index("ALL")) != null) and
   all(.services[]; all((.cap_add // [])[]; allowed_cap)) and
   ((.services.mariadb.cap_add // []) | sort ==
     ["CHOWN", "DAC_OVERRIDE", "KILL", "SETGID", "SETUID"]) and
+  ((.services.wordpress.cap_add // []) | sort ==
+    ["CHOWN", "DAC_OVERRIDE", "SETGID", "SETUID"]) and
+  ((.services.nginx.cap_add // []) | sort ==
+    ["CHOWN", "DAC_READ_SEARCH", "NET_BIND_SERVICE", "SETGID", "SETUID"]) and
   ((.services.redis.cap_add // []) | sort ==
-    ["CHOWN", "DAC_OVERRIDE", "KILL", "SETGID", "SETUID"])
+    ["CHOWN", "DAC_OVERRIDE", "KILL", "SETGID", "SETUID"]) and
+  ((.services.ftp.cap_add // []) | sort ==
+    ["CHOWN", "DAC_OVERRIDE", "DAC_READ_SEARCH", "NET_BIND_SERVICE", "SETGID", "SETUID", "SYS_CHROOT"]) and
+  ((.services["static-site"].cap_add // []) | length == 0) and
+  ((.services.adminer.cap_add // []) | length == 0) and
+  ((.services.backup.cap_add // []) | sort ==
+    ["DAC_OVERRIDE", "DAC_READ_SEARCH", "SETGID"])
 ' >/dev/null || fail 'Container capability allowlist is broader than the reviewed contract'
 
 grep -Fqx '!tools/healthcheck.sh' srcs/requirements/wordpress/.dockerignore ||
