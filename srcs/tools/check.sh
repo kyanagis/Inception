@@ -55,9 +55,14 @@ printf '%s' "$config" | jq -e '
 ' >/dev/null || fail 'Core Compose contract is incomplete'
 
 printf '%s' "$config" | jq -e '
+  ([.services.mariadb.secrets[].source] | sort == ["db_backup_password", "db_password", "db_root_password"]) and
+  ([.services.wordpress.secrets[].source] | sort == ["db_password", "redis_password", "wp_admin_password", "wp_user_password"]) and
+  ([.services.nginx.secrets[].source] | sort == ["tls_certificate", "tls_private_key"]) and
   ([.services.backup.secrets[].source] == ["db_backup_password"]) and
   ([.services.redis.secrets[].source] == ["redis_password"]) and
   ([.services.ftp.secrets[].source] | sort == ["ftp_password", "ftps_certificate", "ftps_private_key"]) and
+  ((.services.adminer.secrets // []) | length == 0) and
+  ((.services["static-site"].secrets // []) | length == 0) and
   (.services.ftp.networks | keys == ["edge"]) and
   (.services["static-site"].networks | keys == ["edge"]) and
   (.services.adminer.networks | keys | sort == ["adminer_access", "backend"]) and
