@@ -67,6 +67,11 @@ $compose exec -T wordpress sh -ec '
   runuser -u www-data -- test ! -w /var/www/html/wp-settings.php
   test "$(stat -c %U:%G /var/www/html/wp-content/uploads)" = www-data:www-data
 '
+$compose exec -T wordpress test ! -S /var/run/docker.sock
+if $compose exec -T wordpress curl --fail --silent --show-error --max-time 3 https://example.com/ >/dev/null 2>&1; then
+  echo 'WordPress unexpectedly has Internet egress from internal networks' >&2
+  exit 1
+fi
 [ "$($compose exec -T --user www-data wordpress wp option get home --path=/var/www/html)" = "https://$DOMAIN_NAME" ]
 [ "$($compose exec -T --user www-data wordpress wp option get siteurl --path=/var/www/html)" = "https://$DOMAIN_NAME" ]
 $compose exec -T mariadb mariadb-healthcheck
