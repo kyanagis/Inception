@@ -82,6 +82,10 @@ NGINXはTLS 1.2と1.3だけを受け付けます。port 80はmandatory entry poi
 
 ## 5. 認証情報
 
+WordPressの管理者名・一般ユーザー名は `srcs/.env` の `WP_ADMIN_USER`・`WP_USER` で確認します。管理画面には管理者名と `secrets/wp_admin_password.txt` の内容でログインします。秘密値は自身のVM内で必要なときだけ確認してください。
+
+認証情報を変更するときは、DB・WordPressなど実サービス側の変更とsecretファイルの更新を対応させます。secretファイルの書換えだけで保存済みユーザーのパスワードが変更されるわけではありません。変更前にバックアップを取り、更新後はログインと `make test` を確認します。
+
 認証情報はリポジトリ直下の `secrets/` にローカル生成されます。
 
 | ファイル | 用途 |
@@ -116,9 +120,13 @@ make dependency-audit
 各コマンドの目的:
 
 - `make check`: Compose、Dockerfile、secret、capability、TLS、Redis ACL、ドキュメント等の静的contractを検証する。
+
 - `make doctor`: VM、Docker、保存先、必要tool、host側前提を検証する。
+
 - `make test`: mandatory stackを起動し、NGINX → WordPress → MariaDBの実動作と主要な権限境界を確認する。
+
 - `make audit`: privileged/host namespace、backend port公開、credential環境変数、tracked secret、read-only rootfs、`no-new-privileges`、Docker storage pressure等を仮説単位で確認する。
+
 - `make dependency-audit`: WordPress Core、WP-CLI、Redis Object Cache、Adminerについてupstreamのcurrent releaseと固定versionを照合し、archiveまたは公式release assetのSHA-256も再検証する。
 
 ## 7. Bonus検証

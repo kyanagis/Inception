@@ -12,6 +12,10 @@ The bonus profile adds Redis object caching, explicit FTPS access to WordPress u
 
 Security is treated as a set of hypotheses to verify rather than a set of claims. The repository includes static checks, runtime smoke tests, a bonus integration test, dependency freshness checks, crash/partial-state fault injection, backup restore drills, and a hypothesis-driven security audit. Containers use read-only root filesystems, reduced Linux capabilities, `no-new-privileges`, bounded logs, explicit networks, health checks, and file-backed Compose secrets.
 
+## Project description
+
+Docker Compose defines the services, networks, named volumes, and secret mounts in `srcs/docker-compose.yml`. Each service has its own Dockerfile and configuration under `srcs/requirements/`; setup and validation scripts live in `srcs/tools/`. The root `Makefile` builds and runs the application through Compose. `.inception/` contains host prerequisite declarations and an evaluation entry point.
+
 ### Design choices
 
 | Topic | Chosen model | Why |
@@ -111,21 +115,32 @@ make fclean
 
 Primary references used while implementing and reviewing the project:
 
-- Docker Engine documentation
-- Docker Compose specification and secrets documentation
-- Docker storage volume documentation
-- NGINX documentation
-- MariaDB Server documentation
-- WordPress developer documentation
-- WP-CLI documentation
-- PHP-FPM documentation
-- Redis ACL documentation
-- OpenSSL documentation
-- Mozilla TLS configuration guidance
-- OWASP Docker Security Cheat Sheet
+- [Docker Engine documentation](https://docs.docker.com/engine/)
+
+- [Docker Compose documentation](https://docs.docker.com/compose/) and [secrets](https://docs.docker.com/compose/how-tos/use-secrets/)
+
+- [Docker volumes](https://docs.docker.com/engine/storage/volumes/)
+
+- [NGINX documentation](https://nginx.org/en/docs/)
+
+- [MariaDB Server documentation](https://mariadb.com/docs/server/)
+
+- [WordPress developer documentation](https://developer.wordpress.org/)
+
+- [WP-CLI documentation](https://developer.wordpress.org/cli/commands/)
+
+- [PHP-FPM documentation](https://www.php.net/manual/en/install.fpm.php)
+
+- [Redis ACL documentation](https://redis.io/docs/latest/operate/oss_and_stack/management/security/acl/)
+
+- [OpenSSL documentation](https://docs.openssl.org/)
+
+- [Mozilla TLS guidance](https://wiki.mozilla.org/Security/Server_Side_TLS)
+
+- [OWASP Docker Security Cheat Sheet](https://cheatsheetseries.owasp.org/cheatsheets/Docker_Security_Cheat_Sheet.html)
 
 Detailed operator instructions are in `USER_DOC.md`. Architecture, bootstrap, validation, recovery, and threat-oriented review procedures are in `DEV_DOC.md`. `REQUIREMENTS.md` maps subject requirements to implementation and verification evidence.
 
-## AI usage
+### AI usage
 
 AI was used as a review and drafting aid for requirements traceability, shell and Compose review, threat-hypothesis generation, documentation structure, CI design, and adversarial edge-case analysis. Generated suggestions were reviewed against the repository, and executable claims are backed by repository checks or target-VM tests. AI output is not treated as authoritative evidence; the learner remains responsible for understanding and defending every submitted component.
