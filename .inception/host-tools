@@ -1,0 +1,10 @@
+# command nixpkgs-attribute
+#
+# The published OVA already ships these baseline commands.  inception-evaluate
+# reads this file after pulling the current submit branch and can open an
+# ephemeral nix shell for any command that a future submit revision adds here
+# but the appliance does not yet have.  Keep one safe identifier pair per line.
+jq jq
+python3 python3
+ip iproute2
+shellcheck shellcheck

@@ -1,0 +1,6 @@
+**
+!Dockerfile
+!conf/server.cnf
+!tools/entrypoint.sh
+!tools/healthcheck.sh
+!tools/prepare-state.sh

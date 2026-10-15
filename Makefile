@@ -1,0 +1,138 @@
+SHELL := /bin/sh
+COMPOSE := docker --host unix:///var/run/docker.sock compose --env-file srcs/.env -f srcs/docker-compose.yml
+export LOGIN
+.DEFAULT_GOAL := all
+.NOTPARALLEL:
+.PHONY: all host-ready auto-configure host-setup configure preflight doctor setup config build bonus-build up bonus down stop start restart status logs check audit dependency-audit test bonus-test backup-now backup-list backup-verify clean fclean re help
+
+all: up
+
+host-ready:
+	@set -eu; \
+	if command -v inception-host-update >/dev/null 2>&1 && [ -f .inception/host-abi ]; then \
+	  expected=$$(tr -d '[:space:]' < .inception/host-abi); \
+	  installed=$$(tr -d '[:space:]' < /etc/inception-host-abi 2>/dev/null || printf 0); \
+	  host_ref=$$(tr -d '[:space:]' < .inception/host-source 2>/dev/null || true); \
+	  if [ "$$installed" -lt 9 ]; then \
+	    inception-host-update --ensure "$$expected"; \
+	  elif [ -n "$$host_ref" ]; then \
+	    INCEPTION_HOST_REPO_REF="$$host_ref" inception-host-update --ensure "$$expected"; \
+	  else inception-host-update --ensure "$$expected"; fi; \
+	fi
+auto-configure: host-ready
+	@set -eu; \
+	login="$${LOGIN:-$${INCEPTION_LOGIN:-}}"; \
+	if [ -z "$$login" ] && [ -r /var/lib/inception/environment ]; then \
+	  set -a; . /var/lib/inception/environment; set +a; login="$$INCEPTION_LOGIN"; \
+	fi; \
+	if [ -f srcs/.env ]; then \
+	  if [ -n "$$login" ]; then ./srcs/tools/configure.sh "$$login" >/dev/null; fi; \
+	else \
+	  [ -n "$$login" ] || { printf '%s\n' 'No runtime login configured. In the published OVA run inception-setup LOGIN once; on Debian use make configure LOGIN=LOGIN.' >&2; exit 2; }; \
+	  ./srcs/tools/configure.sh "$$login"; \
+	fi
+
+host-setup:
+	@./srcs/tools/host-setup.sh "$$LOGIN"
+
+configure:
+	@set -eu; login="$${LOGIN:-$${INCEPTION_LOGIN:-}}"; if [ -z "$$login" ] && [ -r /var/lib/inception/environment ]; then set -a; . /var/lib/inception/environment; set +a; login="$$INCEPTION_LOGIN"; fi; [ -n "$$login" ] || { printf '%s\n' 'Usage: make configure LOGIN=login' >&2; exit 2; }; ./srcs/tools/configure.sh "$$login"
+
+preflight: host-ready auto-configure
+	@./srcs/tools/preflight.sh
+doctor: preflight
+	@printf '%s\n' 'Host prerequisites and persistent-storage contract are valid.'
+
+setup: preflight
+	@./srcs/tools/setup.sh
+
+config:
+	@$(COMPOSE) --profile bonus config --quiet
+
+build: setup
+	$(COMPOSE) build mariadb wordpress nginx
+
+bonus-build: setup
+	$(COMPOSE) --profile bonus build
+
+up: setup
+	WP_REDIS_DISABLED=1 $(COMPOSE) up --detach --build --remove-orphans --wait --wait-timeout 180
+	$(COMPOSE) --profile bonus stop redis ftp static-site adminer backup
+
+bonus: setup
+	WP_REDIS_DISABLED=0 $(COMPOSE) --profile bonus up --detach --build --remove-orphans --wait --wait-timeout 180
+
+down: preflight
+	$(COMPOSE) --profile bonus down --remove-orphans
+
+stop: preflight
+	$(COMPOSE) --profile bonus stop
+
+start restart: setup
+	@set -eu; container_id=$$($(COMPOSE) ps --all --quiet wordpress); \
+	 test -n "$$container_id" || { printf '%s\n' 'No existing stack; run make up or make bonus first.' >&2; exit 1; }; \
+	 saved_env=$$(docker --host unix:///var/run/docker.sock inspect --format '{{json .Config.Env}}' "$$container_id"); \
+	 if printf '%s' "$$saved_env" | jq -e 'index("WP_REDIS_DISABLED=0") != null' >/dev/null; then \
+	   $(COMPOSE) --profile bonus $@ $(if $(filter start,$@),--wait --wait-timeout 180,); \
+	 else $(COMPOSE) $@ $(if $(filter start,$@),--wait --wait-timeout 180,); fi
+
+status: preflight
+	$(COMPOSE) --profile bonus ps
+
+logs: preflight
+	$(COMPOSE) --profile bonus logs --follow --tail=100
+
+check:
+	@./srcs/tools/check.sh
+
+audit:
+	@sh ./srcs/tools/security-audit.sh
+
+dependency-audit:
+	@sh ./srcs/tools/dependency-audit.sh
+
+test: up
+	@./srcs/tools/check.sh
+	@./srcs/tools/smoke-test.sh
+
+bonus-test: bonus
+	@./srcs/tools/check.sh
+	@sh ./srcs/tools/bonus-smoke-test.sh
+
+backup-now: preflight
+	$(COMPOSE) --profile bonus exec -T backup /usr/local/bin/backup-now
+
+backup-list: preflight
+	$(COMPOSE) --profile bonus exec -T backup /usr/local/bin/backup-manifest list /backups
+
+backup-verify: preflight
+	@backup=$${BACKUP:?Usage: make backup-verify BACKUP=YYYYMMDDTHHMMSSZ-XXXXXXXXXX}; \
+	$(COMPOSE) --profile bonus exec -T backup /usr/local/bin/backup-manifest verify "/backups/$$backup"
+
+clean: down
+
+fclean: preflight
+	@printf '%s\n' 'Removing project containers, images and persistent volume data.'
+	$(COMPOSE) --profile bonus down --volumes --rmi all --remove-orphans
+
+re: fclean
+	$(MAKE) all
+
+help:
+	@printf '%s\n' \
+	'Published OVA first use:' \
+	'  inception-setup login' \
+	'  git clone --branch submit --single-branch https://github.com/kyanagis/Inception.git Inception && cd Inception' \
+	'  make' \
+	'  make test' \
+	'Evaluator-managed disposable checkout: inception-evaluate --full' \
+	'' \
+	'Generic dedicated Debian VM first use:' \
+	'  make configure LOGIN=login' \
+	'  make host-setup LOGIN=login' \
+	'  make' \
+	'' \
+	'Mandatory: build, up, test, stop, start, restart, status, logs, down' \
+	'Bonus: bonus-build, bonus, bonus-test, backup-now, backup-list, backup-verify BACKUP=<name>' \
+	'Validation: check (static), audit (threat hypotheses), doctor (host), config, test / bonus-test' \
+	'Destructive: fclean deletes project containers, images, and named-volume data; re rebuilds from empty state.'

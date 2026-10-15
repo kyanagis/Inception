@@ -1,0 +1,6 @@
+**
+!Dockerfile
+!tools/backup.sh
+!tools/entrypoint.sh
+!tools/manifest.py
+!tools/schedule.py
