@@ -24,6 +24,19 @@ volumes=$(docker --host unix:///var/run/docker.sock volume ls --format '{{.Name}
 if printf '%s\n' "$volumes" | grep -Fx inception_mariadb_data >/dev/null; then
   established=true
 fi
+# Validate the whole existing set before generating anything. A missing database
+# secret is data recovery, never an invitation to silently change credentials.
+for name in db_password db_root_password db_backup_password wp_admin_password wp_user_password ftp_password redis_password; do
+  target="$secrets_dir/$name.txt"
+  [ ! -L "$target" ] || { echo "Refusing symlink secret: $name" >&2; exit 1; }
+  if [ -e "$target" ]; then
+    [ -f "$target" ] && [ "$(wc -c < "$target")" -ge 64 ] && [ "$(wc -c < "$target")" -le 65 ] &&
+      LC_ALL=C grep -Eq '^[0-9a-fA-F]{64}$' "$target" || { echo "Invalid existing secret: $name" >&2; exit 1; }
+  elif [ "$established" = true ] && [ "$name" != redis_password ]; then
+    echo "Missing secret with existing database volume: $name; restore the original secret" >&2
+    exit 1
+  fi
+done
 for name in db_password db_root_password db_backup_password wp_admin_password wp_user_password ftp_password redis_password; do
   target="$secrets_dir/$name.txt"
   [ ! -L "$target" ] || { echo "Refusing symlink secret: $name" >&2; exit 1; }
@@ -32,7 +45,7 @@ for name in db_password db_root_password db_backup_password wp_admin_password wp
       LC_ALL=C grep -Eq '^[0-9a-fA-F]{64}$' "$target" || { echo "Invalid existing secret: $name" >&2; exit 1; }
   else
     case "$name" in
-      db_backup_password|redis_password) ;;
+      redis_password) ;;
       *) [ "$established" = false ] || { echo "Missing secret with existing database volume: $name" >&2; exit 1; } ;;
     esac
     temporary=$(mktemp "$secrets_dir/.secret.XXXXXXXX")

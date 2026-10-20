@@ -30,7 +30,7 @@ make up
 make test
 ```
 
-`make configure` は `srcs/.env` を生成します。`make host-setup` は専用VMであることを確認し、Docker data-rootと `/etc/hosts` を安全側に検証しながら構成します。危険な既存Docker状態やストレージ移行を検知した場合は停止します。
+`make configure` は初回のみ `srcs/.env` を生成し、既存の設定を保持します。別loginや不正なDOMAIN_NAME定義は上書きせず拒否します。`make host-setup` は専用VMであることを確認し、Docker data-rootと `/etc/hosts` を安全側に検証しながら構成します。危険な既存Docker状態やストレージ移行を検知した場合は停止します。
 
 YOUR_LOGIN が `kyanagis` の場合、主な値は次のようになります。
 

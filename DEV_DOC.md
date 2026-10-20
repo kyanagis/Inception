@@ -127,7 +127,7 @@ latest tagは使いません。
 
 - health checks
 
-RedisだけはCompose file-backed secretの0600 ownership問題を安全に処理するためentrypointをrootで開始します。root phaseではsecretを読み、/run/redis/users.aclをtmpfsへ生成し、CHOWN/DAC_OVERRIDE/SETUID/SETGIDを使った後、gosu redisでdaemonを非root起動します。Composeの init: true によるtiniがUIDの異なるdaemonへ停止signalを転送できるようKILLもRedis/MariaDBだけへ許可します。SYS_ADMINなどの強いcapabilityは静的checkで拒否します。固定UID/GIDは使用しません。
+RedisだけはCompose file-backed secretの0600 ownership問題を安全に処理するためentrypointをrootで開始します。root phaseではsecretを読み、/run/redis/users.aclをtmpfsへ生成し、CHOWN/DAC_OVERRIDE/SETUID/SETGIDを使った後、gosu redisでdaemonを非root起動します。Composeの init: true によるtiniがUIDの異なるdaemonへ停止signalを転送できるようKILLをRedis/MariaDB/WordPressへ許可します。WordPressのFPM masterも異なるUIDのworkerへsignalを送るために必要です。SYS_ADMINなどの強いcapabilityは静的checkで拒否します。固定UID/GIDは使用しません。
 
 Redis ACL:
 
@@ -187,7 +187,7 @@ MariaDB entrypointは単純な「directoryが空ならinit」ではありませ�
 
 - backup userをapplication userと分離
 
-認証不一致や未知のdataを検出した場合、暗黙のresetより停止を選びます。
+認証不一致や未知のdataを検出した場合、暗黙のresetより停止を選びます。初期化と既存account検証は同期bootstrapとして行い、entrypoint内で一時daemonをバックグラウンド実行しません。旧2行identityは自動移行せず、既存データとsecretを保持して拒否します。旧版で停止・検証済みbackupを取得し、隔離環境の新規stackへSQLとWordPress filesを復元してから切替えてください。markerを手で変更して認証検証を迂回しないでください。
 
 ## 9. 永続化
 
@@ -350,3 +350,25 @@ restoreは隔離VMで:
 8. ownership修復
 9. account/URL/post/upload/Redis検証
 10. 承認後のみ切替
+
+## 12. 評価時の構成変更と回帰試験
+
+既存の `srcs/.env` は `make configure`、通常のmake、評価入口から上書きしません。DOMAIN_NAMEは生成時と同じ `DOMAIN_NAME=login.42.fr` の形式で一度だけ定義します。別loginへの変更はデータとsecretを含む明示的な移行が必要です。
+
+ホストの前提設定は `srcs/host/` に集約しています。rootの `.inception/evaluate` は旧OVAクライアント用の設定を持たない互換ランチャーです。実体の `srcs/host/evaluate` がtool宣言を検査し、不足時はOVAのNix経由で補います。通常のDebianでは必要toolを先にインストールしてください。
+
+WordPressはSIGQUITで停止し、FPM workerの処理完了を最大10秒待ちます。Compose全体の停止猶予は30秒です。10秒を超える処理の完了保証ではありません。`CAP_KILL` は異なるUID間のsignal転送用で、worker自体のcapabilityは引き続き空です。
+
+評価の構成変更例はWordPress内部のFPMポート9000から9001への変更です。`srcs/requirements/wordpress/conf/www.conf`、同サービスのhealthcheckとDockerfileのEXPOSE、およびNGINX templateの両fastcgi_passを揃えて変更し、`make build && make up` 後にHTTPSとhealthを確認します。戻すときも同じ手順で再構築します。バックエンドのhost公開は追加しません。FTPのhost公開ポート変更には `.env` だけでなく `srcs/host/host-contract.json` とVM側firewallの整合も必要です。
+
+`sh srcs/tools/fault-injection-test.sh` は独立したsecret・named volume・networkを生成した使い捨て構成でのみ障害を注入します。本番データの削除を試験手順に含めません。VMの実再起動による永続化確認と対面の口頭説明は別途実施してください。
+
+回帰試験の個別実行（先にimageをbuildしてください）:
+
+```sh
+python3 srcs/tools/configuration-test.py
+python3 srcs/tools/mariadb-regression-test.py
+sh srcs/tools/fault-injection-test.sh
+```
+
+MariaDB試験は独自volumeと資格情報で初期化し、root/app/backupの誤secret、account policy・権限変更、排他、旧identityとmarkerの異常を検証します。元のstackを変更せず、試験が所有する資源だけを削除します。構成保持試験は稼働環境のvolumeの存在を読み取り、使い捨て作業treeでsecret欠落時の拒否を確認します。

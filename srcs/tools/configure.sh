@@ -13,21 +13,15 @@ env_file=$project_dir/srcs/.env
 [ -f "$template" ] && [ ! -L "$template" ] || fail 'Expected a regular srcs/.env.example'
 [ ! -L "$env_file" ] || fail 'Refusing symlink srcs/.env'
 
-old_domain=
-if [ -f "$env_file" ]; then
+# Existing configuration is user-owned. Automatic setup never resets it.
+if [ -e "$env_file" ]; then
+  [ -f "$env_file" ] || fail 'Expected a regular srcs/.env'
+  definitions=$(grep -Ec '^[[:space:]]*(export[[:space:]]+)?DOMAIN_NAME([[:space:]]*(=|$))' "$env_file" || :)
+  [ "$definitions" = 1 ] || fail 'Expected exactly one canonical DOMAIN_NAME definition'
   old_domain=$(sed -n 's/^DOMAIN_NAME=//p' "$env_file")
-fi
-
-if [ -n "$old_domain" ] && [ "$old_domain" != "$login.42.fr" ]; then
-  if command -v docker >/dev/null 2>&1 && docker --host unix:///var/run/docker.sock info >/dev/null 2>&1; then
-    for volume in inception_mariadb_data inception_wordpress_data inception_backup_data; do
-      if docker --host unix:///var/run/docker.sock volume inspect "$volume" >/dev/null 2>&1; then
-        fail 'Existing project volumes prevent changing login; preserve data and migrate explicitly'
-      fi
-    done
-  elif [ -d "$project_dir/secrets" ] && find "$project_dir/secrets" -type f ! -name .gitkeep -print -quit | read -r _entry; then
-    fail 'Cannot verify existing deployment while Docker is unavailable; restore daemon access before changing login'
-  fi
+  [ "$old_domain" = "$login.42.fr" ] || fail 'Existing configuration has another or invalid DOMAIN_NAME; migrate explicitly'
+  printf 'Preserved existing configuration for %s\n' "$old_domain"
+  exit 0
 fi
 
 tmp_file=$(mktemp "$project_dir/srcs/.env.tmp.XXXXXX")

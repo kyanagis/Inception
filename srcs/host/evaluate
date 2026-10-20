@@ -1,0 +1,74 @@
+#!/bin/sh
+set -eu
+
+mode=${1:-prepare}
+case "$mode" in
+  prepare|mandatory|bonus|full|audit|update-only) ;;
+  *) printf 'Usage: srcs/host/evaluate [prepare|mandatory|bonus|full|audit|update-only]\n' >&2; exit 2 ;;
+esac
+
+project_dir=$(CDPATH='' cd -- "$(dirname -- "$0")/../.." && pwd)
+cd "$project_dir"
+# Older OVA clients know only .inception/evaluate. Resolve the authoritative
+# tool declaration here as well, so relocating configuration preserves upgrades.
+set --
+while read -r tool attribute extra; do
+  case "$tool" in ''|'#'*) continue ;; esac
+  for identifier in "$tool" "$attribute"; do
+    case "$identifier" in ''|*[!a-zA-Z0-9_.+-]*) printf 'Invalid host tool declaration\n' >&2; exit 2 ;; esac
+  done
+  [ -z "$extra" ] || { printf 'Invalid host tool declaration\n' >&2; exit 2; }
+  if ! command -v "$tool" >/dev/null 2>&1; then
+    set -- "$@" "nixpkgs#$attribute"
+  fi
+done < srcs/host/host-tools
+if [ "$#" -gt 0 ]; then
+  [ -z "${INCEPTION_TOOL_SHELL:-}" ] && command -v nix >/dev/null 2>&1 || {
+    printf 'Missing declared host tools; install srcs/host/host-tools prerequisites\n' >&2
+    exit 2
+  }
+  export INCEPTION_TOOL_SHELL=1
+  exec nix --extra-experimental-features 'nix-command flakes' shell "$@" --command sh ./srcs/host/evaluate "$mode"
+fi
+
+if [ "$mode" = update-only ]; then
+  exit 0
+fi
+
+login=${INCEPTION_LOGIN:-${LOGIN:-}}
+[ -n "$login" ] || {
+  printf 'No 42 login in environment. In the published OVA run inception-setup LOGIN once.\n' >&2
+  exit 2
+}
+
+make configure LOGIN="$login"
+make doctor
+make check
+
+# The smoke-test targets own their service-mode transition:
+#   make test       -> prerequisite up
+#   make bonus-test -> prerequisite bonus
+# Keep this ABI at one transition per mode.  Calling up/bonus here as well
+# creates a second Compose reconciliation, which can recreate only a subset of
+# bonus services and leave WordPress plugin state out of sync with Redis.
+case "$mode" in
+  prepare)
+    ;;
+  mandatory)
+    make test
+    make audit
+    ;;
+  bonus)
+    make bonus-test
+    make audit
+    ;;
+  full)
+    make test
+    make audit
+    make bonus-test
+    make audit
+    ;;
+  audit)
+    make audit
+    ;;
+esac

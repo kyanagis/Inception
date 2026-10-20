@@ -55,6 +55,7 @@ services:
 
   wordpress:
     <<: *default-security
+    stop_signal: SIGQUIT
     image: wordpress:inception
     build:
       context: requirements/wordpress
@@ -101,6 +102,7 @@ services:
     cap_add:
       - CHOWN
       - DAC_OVERRIDE
+      - KILL
       - SETGID
       - SETUID
     healthcheck:

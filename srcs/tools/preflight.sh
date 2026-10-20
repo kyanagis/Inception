@@ -9,18 +9,18 @@ done
 [ "$(docker context show)" = default ] || fail 'Select the default Docker context'
 project_dir=$(CDPATH='' cd -- "$(dirname -- "$0")/../.." && pwd)
 env_file=$project_dir/srcs/.env
-contract_file=$project_dir/.inception/host-contract.json
-abi_file=$project_dir/.inception/host-abi
+contract_file=$project_dir/srcs/host/host-contract.json
+abi_file=$project_dir/srcs/host/host-abi
 [ -f "$env_file" ] && [ ! -L "$env_file" ] || fail 'Expected a regular srcs/.env'
-[ -f "$contract_file" ] && [ ! -L "$contract_file" ] || fail 'Expected .inception/host-contract.json'
-[ -f "$abi_file" ] && [ ! -L "$abi_file" ] || fail 'Expected .inception/host-abi'
+[ -f "$contract_file" ] && [ ! -L "$contract_file" ] || fail 'Expected srcs/host/host-contract.json'
+[ -f "$abi_file" ] && [ ! -L "$abi_file" ] || fail 'Expected srcs/host/host-abi'
 required_abi=$(tr -d '[:space:]' < "$abi_file")
 contract_abi=$(jq -er '.host_abi' "$contract_file")
 architecture=$(jq -er '.architecture' "$contract_file")
 engine_min=$(jq -er '.docker_engine_min' "$contract_file")
 compose_min=$(jq -er '.docker_compose_min' "$contract_file")
 case "$required_abi:$contract_abi" in *[!0-9:]*) fail 'Invalid host ABI contract';; esac
-[ "$required_abi" = "$contract_abi" ] || fail '.inception/host-abi differs from host-contract.json'
+[ "$required_abi" = "$contract_abi" ] || fail 'srcs/host/host-abi differs from host-contract.json'
 [ "$(uname -m)" = "$architecture" ] || fail "Host architecture must be $architecture"
 domain=$(sed -n 's/^DOMAIN_NAME=//p' "$env_file")
 data_path=$(sed -n 's/^DATA_PATH=//p' "$env_file")

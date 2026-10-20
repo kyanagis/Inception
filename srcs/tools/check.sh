@@ -18,7 +18,7 @@ for heading in Description Instructions Resources; do
   grep -Eq "^##+ $heading$" README.md || fail "README lacks $heading"
 done
 
-host_abi=$(tr -d '[:space:]' < .inception/host-abi)
+host_abi=$(tr -d '[:space:]' < srcs/host/host-abi)
 ftp_port=$(sed -n 's/^FTP_PORT=//p' srcs/.env)
 ftp_pasv_min=$(sed -n 's/^FTP_PASV_MIN_PORT=//p' srcs/.env)
 ftp_pasv_max=$(sed -n 's/^FTP_PASV_MAX_PORT=//p' srcs/.env)
@@ -34,7 +34,7 @@ jq -e   --argjson abi "$host_abi"   --argjson ftp "$ftp_port"   --argjson pmin "
     (.public_tcp_ports | sort == ([443, $ftp] | sort)) and
     (.public_tcp_ranges == [{"from": $pmin, "to": $pmax}]) and
     (.loopback_tcp_ports | sort == [8080, 8081])
-  ' .inception/host-contract.json >/dev/null ||
+  ' srcs/host/host-contract.json >/dev/null ||
   fail 'Declared host contract does not match the project exposure contract'
 
 config=$(docker compose --env-file srcs/.env -f srcs/docker-compose.yml --profile bonus config --format json)
@@ -93,7 +93,7 @@ printf '%s' "$config" | jq -e '
   ((.services.mariadb.cap_add // []) | sort ==
     ["CHOWN", "DAC_OVERRIDE", "KILL", "SETGID", "SETUID"]) and
   ((.services.wordpress.cap_add // []) | sort ==
-    ["CHOWN", "DAC_OVERRIDE", "SETGID", "SETUID"]) and
+    ["CHOWN", "DAC_OVERRIDE", "KILL", "SETGID", "SETUID"]) and
   ((.services.nginx.cap_add // []) | sort ==
     ["CHOWN", "DAC_READ_SEARCH", "NET_BIND_SERVICE", "SETGID", "SETUID"]) and
   ((.services.redis.cap_add // []) | sort ==
@@ -183,11 +183,20 @@ for command in '+get' '+set' '+del' '+mget' '+mset' '+expire' '+flushdb' '+eval'
     fail "Redis ACL is missing reviewed command $command"
 done
 
+# A temporary background database also violates the evaluation entrypoint rule.
+for file in $(find srcs/requirements -name entrypoint.sh); do
+  if grep -En '(^|[^&])&[[:space:]]*(#.*)?$' "$file"; then
+    fail "Background process in entrypoint: $file"
+  fi
+done
+sh -n .inception/evaluate
+sh -n srcs/host/evaluate
+
 shell_files=$(find srcs/tools srcs/requirements -name '*.sh')
 for file in $shell_files; do
   sh -n "$file" || fail "Shell syntax error: $file"
 done
-for file in srcs/requirements/bonus/backup/tools/manifest.py srcs/requirements/bonus/backup/tools/schedule.py; do
+for file in $(find srcs -name "*.py"); do
   python3 -c 'import ast, pathlib, sys; ast.parse(pathlib.Path(sys.argv[1]).read_text(), filename=sys.argv[1])' "$file" ||
     fail "Python syntax error: $file"
 done

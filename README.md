@@ -14,7 +14,7 @@ Security is treated as a set of hypotheses to verify rather than a set of claims
 
 ## Project description
 
-Docker Compose defines the services, networks, named volumes, and secret mounts in `srcs/docker-compose.yml`. Each service has its own Dockerfile and configuration under `srcs/requirements/`; setup and validation scripts live in `srcs/tools/`. The root `Makefile` builds and runs the application through Compose. `.inception/` contains host prerequisite declarations and an evaluation entry point.
+Docker Compose defines the services, networks, named volumes, and secret mounts in `srcs/docker-compose.yml`. Each service has its own Dockerfile and configuration under `srcs/requirements/`; setup and validation scripts live in `srcs/tools/`. The root `Makefile` builds and runs the application through Compose. `srcs/host/` contains host prerequisite declarations and the evaluation entry point. `.inception/evaluate` is a configuration-free compatibility launcher for older OVA clients.
 
 ### Design choices
 

@@ -31,7 +31,7 @@
 | developer documentation | DEV_DOC.md | human review |
 | OVAとgeneric Debianのbootstrap分離 | inception-setup vs host-setup | make doctor、docs |
 | OVAのsubmit commit非固定 | runtime clone/fast-forward | inception-evaluate |
-| future userspace dependency | .inception/host-tools | inception-evaluate |
+| future userspace dependency | srcs/host/host-tools | inception-evaluate |
 | Redis secret permission | root bootstrap -> tmpfs ACL -> gosu redis | make bonus、make bonus-test |
 | Redis危険command制限 | -@allからのexplicit command allowlist | make check、make bonus-test |
 | hidden file direct access拒否 | NGINX dotfile location | make check、runtime HTTP check |
@@ -41,7 +41,7 @@
 | backup restore可能性 | network=noneの使い捨てMariaDBへSQL restore、別tmpdirへWordPress archive展開 | make bonus-test |
 | crash/partial-state recovery | PID1 kill + WordPress partial publish residueからの再収束 | Submit Compatibility CI |
 | storage pressure検知 | Docker data-root block/inode/free-space閾値 | make audit |
-| privileged host update provenance | ABI9以降は.inception/host-sourceの40hex commitへ固定 | host ABI CI、inception-host-update |
+| privileged host update provenance | ABI9以降はsrcs/host/host-sourceの40hex commitへ固定 | host ABI CI、inception-host-update |
 | bonus全体の実証 | bonus-smoke-test.sh | make bonus-test |
 | threat-hypothesis review | security-audit.sh | make audit |
 
@@ -51,7 +51,7 @@
 
 submit側が守るcontract:
 
-1. host dependencyを増やす場合、.inception/host-toolsへ command と nixpkgs attribute を追加する。
+1. host dependencyを増やす場合、srcs/host/host-toolsへ command と nixpkgs attribute を追加する。
 2. host kernel/VirtualBox hardwareに依存しない通常のuserspace変更はrepo内で完結させる。
 3. OVAではmake host-setupを呼ばない。
 4. make configure、make doctor、make checkがOVAのmanaged Docker data-rootで成立する。
