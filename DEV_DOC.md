@@ -373,6 +373,6 @@ sh srcs/tools/fault-injection-test.sh
 
 MariaDB試験は独自volumeと資格情報で初期化し、root/app/backupの誤secret、account policy・権限変更、排他、旧identityとmarkerの異常を検証します。元のstackを変更せず、試験が所有する資源だけを削除します。構成保持試験は稼働環境のvolumeの存在を読み取り、使い捨て作業treeでsecret欠落時の拒否を確認します。
 
-`make restart` は現在のmandatory/bonusモードの既存containerだけを再起動し、全対象のrunning/healthyへの復帰を最大180秒待ちます。mandatoryモードで停止中のbonusを起動したり、構成を再作成したりしません。`make start` も同じモードを維持し、Composeのhealth待機後に戻ります。
+`make restart` は現在のmandatory/bonusモードの既存containerだけを再起動し、全対象のrunning/healthyへの復帰を最大180秒待ちます。mandatoryモードで停止中のbonusを起動したり、構成を再作成したりしません。`make start` も同じモードと既存containerを維持し、同じhealth待機処理の完了後に戻ります。最低対応のCompose 2.38.2では `start --wait` が未対応のため、このflagに依存しません（[該当版のCLI実装](https://github.com/docker/compose/blob/v2.38.2/cmd/compose/start.go)）。
 
 `python3 srcs/tools/lifecycle-test.py` は対象stackをmandatory/bonusへ切り替え、restartとstop→startの直後にHTTPS・DB接続・siteurl・saltとcontainer identityの保持を検証し、最後にmandatoryへ戻します。稼働中stackの操作を伴うため、評価または保守の時間帯に実行してください。

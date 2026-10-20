@@ -229,8 +229,23 @@ jobs:
           make bonus-test
           test -z "$(git status --porcelain --untracked-files=no)"
 
-      - name: Lifecycle readiness and mode preservation
-        run: python3 srcs/tools/lifecycle-test.py
+      - name: Minimum Compose lifecycle readiness and mode preservation
+        shell: bash
+        run: |
+          set -euo pipefail
+          cli_config="$(mktemp -d "$RUNNER_TEMP/inception-compose-min.XXXXXXXX")"
+          trap 'rm -rf -- "$cli_config"' EXIT
+          mkdir -p "$cli_config/cli-plugins"
+          compose_binary="$cli_config/cli-plugins/docker-compose"
+          curl --fail --location --retry 3 \
+            https://github.com/docker/compose/releases/download/v2.38.2/docker-compose-linux-x86_64 \
+            --output "$compose_binary"
+          printf '%s  %s\n' \
+            486b3ffc0f806ca2efbc430cef89955386011662f0c76bad17c103d059cfa9cf \
+            "$compose_binary" | sha256sum --check --strict -
+          chmod 0755 "$compose_binary"
+          DOCKER_CONFIG="$cli_config" docker compose version
+          DOCKER_CONFIG="$cli_config" python3 srcs/tools/lifecycle-test.py
 
       - name: Configuration and lost-secret regressions
         run: python3 srcs/tools/configuration-test.py

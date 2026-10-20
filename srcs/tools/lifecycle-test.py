@@ -2,6 +2,7 @@
 """Verify lifecycle readiness on this stack; restore mandatory mode on completion."""
 import hashlib
 import json
+import re
 from pathlib import Path
 import subprocess
 import sys
@@ -26,6 +27,27 @@ def command(args, timeout=240, check=True):
     return result
 
 
+def sanitize_diagnostics(value):
+    """Keep useful CI errors while removing credentials and private key material."""
+    value = re.sub(r'\x1b\[[0-?]*[ -/]*[@-~]', '', value)
+    value = re.sub(r'-----BEGIN [A-Z ]*PRIVATE KEY-----.*?(?:-----END [A-Z ]*PRIVATE KEY-----|\Z)',
+                   '[REDACTED PRIVATE KEY]', value, flags=re.DOTALL)
+    value = re.sub(r'(?i)\b[0-9a-f]{64,}\b', '[REDACTED HEX VALUE]', value)
+    # Replace the actual generated secrets too, covering future non-hex formats.
+    for path in (ROOT / 'secrets').glob('*.txt'):
+        if path.is_file() and not path.is_symlink():
+            try:
+                secret = path.read_text().strip()
+            except (OSError, UnicodeError):
+                continue
+            if secret:
+                value = value.replace(secret, '[REDACTED SECRET]')
+    value = re.sub(r"(?im)((?:[a-z0-9_.-]*(?:password|passwd|secret|token|salt)[a-z0-9_.-]*)\s*[=:]\s*)(?:'[^'\n]*'|\"[^\"\n]*\"|[^\s,;]+)",
+                   r'\1[REDACTED]', value)
+    value = re.sub(r"(?i)(IDENTIFIED\s+BY\s+)(?:'[^']*'|\"[^\"]*\")", r'\1[REDACTED]', value)
+    return value
+
+
 def make(target):
     result = command(['make', target], timeout=600, check=False)
     if result.returncode:
@@ -33,6 +55,8 @@ def make(target):
                                          suffix='.log', delete=False) as log:
             log.write(result.stdout + result.stderr)
             path = log.name
+        print('make %s diagnostics (credentials redacted):' % target, file=sys.stderr)
+        print(sanitize_diagnostics(result.stdout + result.stderr), file=sys.stderr)
         raise RuntimeError('make %s failed; private diagnostics: %s' % (target, path))
 
 
