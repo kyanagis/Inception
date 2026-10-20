@@ -73,8 +73,10 @@ start restart: setup
 	 test -n "$$container_id" || { printf '%s\n' 'No existing stack; run make up or make bonus first.' >&2; exit 1; }; \
 	 saved_env=$$(docker --host unix:///var/run/docker.sock inspect --format '{{json .Config.Env}}' "$$container_id"); \
 	 if printf '%s' "$$saved_env" | jq -e 'index("WP_REDIS_DISABLED=0") != null' >/dev/null; then \
-	   $(COMPOSE) --profile bonus $@ $(if $(filter start,$@),--wait --wait-timeout 180,); \
-	 else $(COMPOSE) $@ $(if $(filter start,$@),--wait --wait-timeout 180,); fi
+	   $(COMPOSE) --profile bonus $@ $(if $(filter start,$@),--wait --wait-timeout 180,) mariadb wordpress nginx redis ftp static-site adminer backup; \
+	   if [ "$@" = restart ]; then ids=$$($(COMPOSE) --profile bonus ps --all --quiet mariadb wordpress nginx redis ftp static-site adminer backup); python3 ./srcs/tools/wait-services.py --expected 8 -- $$ids; fi; \
+	 else $(COMPOSE) $@ $(if $(filter start,$@),--wait --wait-timeout 180,) mariadb wordpress nginx; \
+	   if [ "$@" = restart ]; then ids=$$($(COMPOSE) ps --all --quiet mariadb wordpress nginx); python3 ./srcs/tools/wait-services.py --expected 3 -- $$ids; fi; fi
 
 status: preflight
 	$(COMPOSE) --profile bonus ps

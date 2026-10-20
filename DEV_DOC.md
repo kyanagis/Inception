@@ -43,7 +43,7 @@ make start
 make down
 ```
 
-`make stop` はコンテナを停止し、`make down` はコンテナとネットワークを削除します。どちらもnamed volumeのデータを残します。再起動は `make start`、削除後の再作成は `make up`、構成を含む再構築は `make build` と `make up` を使います。`make fclean` はプロジェクトのvolumeも削除するため、復元可能なバックアップを確認してから実行します。
+`make stop` はコンテナを停止し、`make down` はコンテナとネットワークを削除します。どちらもnamed volumeのデータを残します。再開は `make start`、起動中の再起動は `make restart`、削除後の再作成は `make up`、構成を含む再構築は `make build` と `make up` を使います。`make fclean` はプロジェクトのvolumeも削除するため、復元可能なバックアップを確認してから実行します。
 
 ## 3. host mode
 
@@ -372,3 +372,7 @@ sh srcs/tools/fault-injection-test.sh
 ```
 
 MariaDB試験は独自volumeと資格情報で初期化し、root/app/backupの誤secret、account policy・権限変更、排他、旧identityとmarkerの異常を検証します。元のstackを変更せず、試験が所有する資源だけを削除します。構成保持試験は稼働環境のvolumeの存在を読み取り、使い捨て作業treeでsecret欠落時の拒否を確認します。
+
+`make restart` は現在のmandatory/bonusモードの既存containerだけを再起動し、全対象のrunning/healthyへの復帰を最大180秒待ちます。mandatoryモードで停止中のbonusを起動したり、構成を再作成したりしません。`make start` も同じモードを維持し、Composeのhealth待機後に戻ります。
+
+`python3 srcs/tools/lifecycle-test.py` は対象stackをmandatory/bonusへ切り替え、restartとstop→startの直後にHTTPS・DB接続・siteurl・saltとcontainer identityの保持を検証し、最後にmandatoryへ戻します。稼働中stackの操作を伴うため、評価または保守の時間帯に実行してください。
