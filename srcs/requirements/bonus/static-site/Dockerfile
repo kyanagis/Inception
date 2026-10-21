@@ -1,6 +1,6 @@
 FROM debian:12.15-slim@sha256:3783cc01769c7b2b1b83a5c5ad96c815348e28ed7da68e2e3687004faa906251
 
-ARG DEBIAN_SNAPSHOT=20261014T000000Z
+ARG DEBIAN_SNAPSHOT=20261021T200000Z
 
 RUN printf '%s\n' \
         "deb [check-valid-until=no] http://snapshot.debian.org/archive/debian/${DEBIAN_SNAPSHOT}/ bookworm main" \
