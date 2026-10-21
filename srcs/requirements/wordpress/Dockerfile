@@ -1,6 +1,6 @@
 FROM debian:12.15-slim@sha256:3783cc01769c7b2b1b83a5c5ad96c815348e28ed7da68e2e3687004faa906251
 
-ARG DEBIAN_SNAPSHOT=20261014T000000Z
+ARG DEBIAN_SNAPSHOT=20261021T200000Z
 
 ARG WORDPRESS_VERSION
 ARG WORDPRESS_SHA256
@@ -35,6 +35,7 @@ RUN printf '%s\n' \
         php8.2-xml \
         php8.2-zip \
         unzip \
+    && test "$(dpkg-query -W -f='${Version}' php8.2-common)" = '8.2.35-1~deb12u1' \
     && rm -rf /var/lib/apt/lists/* \
     && curl --fail --location --retry 3 \
         "https://wordpress.org/wordpress-${WORDPRESS_VERSION}.tar.gz" -o /tmp/wordpress.tar.gz \
